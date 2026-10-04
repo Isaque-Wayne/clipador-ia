@@ -1,0 +1,16 @@
+{
+  "name": "clipador-ia",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0 <11"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @clipador-ia/web dev",
+    "dev:api": "pnpm --filter @clipador-ia/api dev",
+    "dev:worker": "pnpm --filter @clipador-ia/worker dev",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build"
+  }
+}

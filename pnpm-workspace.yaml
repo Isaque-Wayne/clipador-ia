@@ -1,0 +1,4 @@
+packages:
+  - 'apps/*'
+
+# Add packages/* when an actual shared package exists.
