@@ -1,8 +1,8 @@
 # Clipador IA
 
 Fundação de um monorepo TypeScript para aprendizado e evolução do Clipador IA.
-Esta fase contém somente uma página inicial, uma API com rota de saúde e o
-bootstrap do worker. Não há funcionalidades de produto implementadas.
+Esta fase contém a página inicial, upload de vídeo, API com rotas de saúde e
+informações e o bootstrap do worker.
 
 ## Organização
 
@@ -21,9 +21,8 @@ existir código realmente compartilhado.
 ## Ferramentas e dependências
 
 Requisitos declarados: Node.js 22 ou superior e pnpm 10.
-As dependências foram apenas declaradas, sem instalação nesta etapa.
-As faixas de versões permitem atualizações compatíveis; uma instalação futura
-gerará `pnpm-lock.yaml`, que deverá ser versionado para reproduzir a resolução.
+As dependências estão disponíveis no workspace, com resolução em `pnpm-lock.yaml`.
+A feature de upload não acrescenta dependências.
 
 Web utiliza Next.js 16 e React 19. A API utiliza Fastify 5. TypeScript está
 declarado em cada aplicação; `tsx` permite executar TypeScript no desenvolvimento
@@ -31,9 +30,9 @@ da API e do worker. Não há biblioteca de UI, fila, banco, autenticação ou IA
 
 ## Comandos preparados
 
-Os comandos abaixo são documentação. Não foram executados. Instalar ferramentas
-ou dependências exige autorização explícita; iniciar serviços também deve estar
-no escopo autorizado.
+Instalar ferramentas ou dependências exige autorização explícita; iniciar
+serviços também deve estar no escopo autorizado. No PowerShell com scripts
+bloqueados, use `pnpm.cmd` em vez de `pnpm`.
 
 | Comando na raiz | Objetivo | Impacto / risco |
 | --- | --- | --- |
@@ -46,7 +45,7 @@ no escopo autorizado.
 
 Após instalação autorizada, executar typecheck e build. Depois, com execução
 dos serviços autorizada, conferir a página inicial e `GET /health`, cuja resposta
-esperada é `{"status":"ok"}`. Não há script de lint configurado nesta fase.
+inclui `"status":"ok"`. Não há script de lint configurado nesta fase.
 
 ## Configurações e decisões
 
@@ -58,12 +57,281 @@ esperada é `{"status":"ok"}`. Não há script de lint configurado nesta fase.
 - A API separa criação da instância, registro de rotas e inicialização.
 - `PORT` é opcional, validado na inicialização e tem padrão `3001`. Nenhum arquivo
   de ambiente foi criado ou modificado. Não existe carregador de `.env` configurado.
-- A API escuta somente no endereço local. Não há integração web/API nesta fase.
+- A API escuta somente no endereço local. O web encaminha o POST de upload
+  por uma Route Handler em streaming e consultas por rewrite, sem configurar CORS.
 - O worker não mantém um processo ocioso: executa o bootstrap e encerra.
 - A interface utiliza CSS e fontes do sistema, sem dependência adicional.
 
 ## Fora do escopo atual
 
-Upload, player, FFmpeg, filas, transcrição, IA, análise de potencial, sugestões
+Player, FFmpeg para cortes/renderização, filas, transcrição, IA, análise de potencial, sugestões
 de edição, legendas, renderização e exportação serão tratados em etapas futuras.
 Uma avaliação futura de potencial não representa garantia de viralização.
+
+## Upload de vídeo
+
+A página também oferece ingestão por link do YouTube, preservando upload local.
+Arquitetura, instalação verificada, limites e teste manual: [ingestão YouTube](docs/youtube-ingestion.md).
+Sem progressivo compatível, a ingestão pode baixar H.264/AAC separados e fazer remux MP4 com FFmpeg local, sem reencode. FFprobe valida o resultado antes da publicação.
+
+Com as dependências existentes, execute em dois terminais na raiz:
+
+```powershell
+pnpm.cmd dev:api
+pnpm.cmd dev:web
+```
+
+Acesse `http://localhost:3000/upload` ou o link na página inicial. Selecione um
+MP4, WebM ou MOV de até 4 GiB (4.294.967.296 bytes, por padrão) e clique em **Enviar vídeo**. Confira a mensagem
+de sucesso com nome sanitizado, tamanho, tipo e ID. Teste também um arquivo vazio, um formato
+não suportado e um vídeo acima do limite. Parar a API permite conferir o erro
+de conexão e tentar novamente depois de reiniciá-la.
+
+O navegador envia os bytes como corpo binário, `Content-Type` do vídeo e
+`X-File-Name` codificado com `encodeURIComponent`. A rota `POST /uploads/video`
+recebe e grava o arquivo em streaming no armazenamento temporário e responde JSON
+com `success`, `message`, `id`, `file: { name, size, type }`, `status: "uploaded"`,
+`nextStep: "processing"`, `extension`, `createdAt` e `checksum: { algorithm:
+"sha256", value: "<64 caracteres hexadecimais>" }`. Erros de validação usam 400,
+413 ou 415; quota excedida retorna 507 com uma mensagem clara.
+Limite de concorrência retorna 429; timeout de upload retorna 408.
+O limite configurado (4 GiB por padrão) é aplicado pela contagem real de bytes durante a escrita,
+mesmo sem Content-Length. Quando presente, Content-Length é validado antes
+da gravação e comparado com o total recebido. A validação básica
+confere tamanho, MIME declarado e extensão; não verifica o conteúdo ou codec.
+O conteúdo é salvo em `apps/api/.data/uploads/<UUID>/video.<extensão>`, com criação
+exclusiva de diretório e arquivo, sem sobrescrita. A gravação começa em `.part`,
+com flush, e promove o arquivo usando hard link exclusivo no mesmo filesystem.
+Depois remove o nome `.part`. `metadata.json` é publicado por último como
+marcador de conclusão. O caminho usa apenas UUID
+gerado no servidor e extensão permitida, nunca o nome fornecido pelo cliente.
+Nomes com separadores ou caracteres de controle são rejeitados; outros caracteres
+inseguros e nomes reservados são sanitizados nos metadados. A pasta `.data/`
+é ignorada pelo Git e não é servida publicamente. Não há processamento ativo.
+O parser do Fastify entrega o stream sem montar um Buffer do vídeo. A escrita
+aguarda cada chunk, respeita backpressure e trata escritas curtas do filesystem.
+O SHA-256 é atualizado com os mesmos chunks gravados e finalizado somente após
+o fim válido do stream e sync do arquivo. Não há segunda leitura completa para
+calcular o hash. A Route Handler do web encaminha `request.body` diretamente;
+o rewrite instalado do Next.js mantinha uma cópia em memória e não é usado no POST.
+
+`config/upload-limits.mjs` é a fonte de verdade dos padrões de `UPLOAD_MAX_FILE_BYTES`
+e `UPLOAD_QUOTA_BYTES` e da validação dessas variáveis de ambiente.
+A API, a validação do navegador, o texto do formulário e o limite de proxy do
+Next.js reutilizam esse módulo. O arquivo `.d.mts` fornece os tipos sem repetir
+o valor. A API lê os limites na inicialização; o web lê `UPLOAD_MAX_FILE_BYTES`
+durante o build e incorpora o mesmo valor no proxy e no bundle do navegador por
+`NEXT_PUBLIC_UPLOAD_MAX_FILE_BYTES` (derivada automaticamente, não configure separadamente).
+Use o mesmo `UPLOAD_MAX_FILE_BYTES` ao iniciar a API e ao construir/iniciar o web.
+Reinicie a API e refaça o build do web após alterar esse limite. `UPLOAD_QUOTA_BYTES`
+controla o armazenamento da API e não é exposta ao navegador.
+O timeout continua sendo 90 segundos: aceitar até 4 GiB não garante concluir
+o envio nesse prazo em conexões lentas (4 GiB exige aproximadamente 45,51 MiB/s).
+
+### Consulta e limites do armazenamento provisório
+
+Use o ID exibido no cartão de sucesso:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3001/uploads/SEU-ID
+```
+
+Também é possível consultar `http://localhost:3000/api/uploads/SEU-ID` pelo proxy.
+`GET /uploads/:id` retorna `{ success: true, upload: { id, file, status, nextStep,
+createdAt, extension, checksum } }`, sem caminhos internos. ID inválido retorna 400;
+desconhecido ou expirado retorna 404.
+
+Cada upload possui `metadata.json` com ID, nome sanitizado, extensão, MIME,
+tamanho, data, status e próximo passo. Na inicialização, a API reconstrói o
+índice antes de aceitar requisições. A leitura valida dados externos, limita o
+JSON a 4 KiB, confere o ID do diretório, extensão permitida e tamanho do vídeo,
+e não publica propriedades extras. Vídeos ausentes, parciais, JSON inválido ou
+tamanho divergente não entram no índice. Há aviso de uploads incompletos no log
+de inicialização. Uploads anteriores a esta etapa, sem JSON, são órfãos: não há
+informação suficiente para recuperar seus metadados originais. Metadados da etapa
+anterior sem checksum continuam recuperáveis com `checksum: null`; nenhum hash
+é inventado ou calculado retroativamente. Checksums presentes precisam declarar
+SHA-256 e conter exatamente 64 caracteres hexadecimais. A recuperação restaura
+o hash conhecido, sem reler o vídeo para recalculá-lo.
+
+### Retenção, quota e segurança
+
+| Configuração no ambiente da API | Padrão | Uso |
+| --- | --- | --- |
+| `UPLOAD_RETENTION_MS` | `86400000` (24 horas) | Validade desde a criação |
+| `UPLOAD_CLEANUP_INTERVAL_MS` | `900000` (15 minutos) | Frequência da limpeza |
+| `UPLOAD_MAX_FILE_BYTES` | `4294967296` (4 GiB) | Limite por vídeo; API e build do web |
+| `UPLOAD_QUOTA_BYTES` | `17179869184` (16 GiB) | Limite lógico de arquivos |
+| `UPLOAD_MAX_CONCURRENT` | `2` | Quantidade máxima de uploads ativos |
+| `UPLOAD_TIMEOUT_MS` | `90000` (90 segundos) | Tempo máximo por upload admitido |
+
+Valores devem ser inteiros positivos; intervalo e timeout não podem exceder `2147483647`
+ms. Configuração inválida impede a inicialização. A API não carrega `.env`
+automaticamente; defina as variáveis no terminal antes de iniciar.
+
+Exemplo de configuração em PowerShell (antes do build do web e da inicialização da API):
+
+```powershell
+$env:UPLOAD_MAX_FILE_BYTES = '4294967296'
+$env:UPLOAD_QUOTA_BYTES = '17179869184'
+pnpm.cmd build
+```
+
+A quota de 16 GiB suporta dois vídeos máximos simultâneos com metadados e margem
+para uploads anteriores. Ela não reserva espaço físico nem garante espaço livre
+no disco; gravação pode falhar antes se o disco estiver cheio. Quatro vídeos de
+exatamente 4 GiB não cabem juntos com seus JSON. Uma quota customizada menor que
+o tamanho de um vídeo mais seus metadados bloqueia esse envio com 507, sem
+ser aumentada automaticamente.
+
+A limpeza ocorre na inicialização, periodicamente e antes de novo upload.
+Uploads completos expiram pela data de criação; órfãos e parciais usam a última
+modificação do diretório e de seus arquivos. A consulta deixa de mostrar um
+upload expirado imediatamente, mesmo antes da remoção física. A limpeza usa
+somente `unlink` de arquivos conhecidos e `rmdir` de diretórios vazios, nunca
+remoção recursiva nem comandos do sistema. Valida UUID, caminho canônico e
+filhos antes de remover. Links simbólicos/junctions e subdiretórios inesperados
+interrompem a operação; não são seguidos. Conteúdo desconhecido não é apagado.
+
+A quota conta vídeos, JSON, parciais e outros arquivos regulares existentes,
+por tamanho lógico (não por blocos físicos ou espaço livre do disco). Antes
+de gravar, reserva espaço para o JSON com hash e maior representação de tamanho;
+depois limita os bytes recebidos com reservas compartilhadas. Um Content-Length
+conhecido é reservado antecipadamente; sem ele, a reserva cresce antes da escrita
+de cada chunk. A seção crítica coordena varredura, limpeza, reservas e índice;
+as gravações acontecem em paralelo. Diretórios ativos são excluídos da varredura,
+e suas reservas contam na quota sem contar novamente seus parciais.
+Excesso conhecido é rejeitado antes de criar diretório; excesso durante o stream
+retorna 507 e remove o parcial. Conteúdo inseguro impede iniciar ou continuar gravando.
+
+O limite de concorrência é por instância da API, sem fila de espera: novas
+requisições recebem 429 enquanto todas as vagas estiverem ocupadas. Vagas e
+reservas são liberadas ao concluir, falhar ou cancelar. O timeout começa após
+a admissão e inclui preparação e escrita. A espera por novos chunks observa
+cancelamento sem destruir o HTTP antes de responder 408. Operações de filesystem
+já em curso terminam antes da limpeza; o deadline é cooperativo, não um mecanismo
+para interromper syscalls do sistema. Um commit completo que termina na fronteira
+do timeout pode permanecer como upload completo. O cliente e o proxy web mantêm
+o limite de 120 segundos, que pode prevalecer se configurar a API acima disso.
+
+Não há autenticação, análise de conteúdo/codec ou coordenação entre
+processos: use **uma instância da API por diretório**, em filesystem local com
+suporte a hard links. O vídeo não é agregado em RAM; existem buffers limitados
+dos streams e do transporte. A varredura a cada envio cresce com a quantidade de
+arquivos. O checksum registra os bytes recebidos; não é comparado com um hash
+do cliente. A pasta deve ser privada e não
+modificada por outros processos; verificações de caminho não eliminam corridas
+contra um usuário local com permissão de escrita. Flush reduz risco de perda,
+mas não oferece garantia completa contra falha física do disco ou energia.
+Em erro do stream, excesso de tamanho/quota, vazio ou cancelamento, o arquivo
+é fechado e apenas os parciais criados pela operação são removidos dentro do
+diretório UUID validado. Nenhum checksum incompleto é publicado no índice.
+Se o cliente já desconectou, não é possível entregar uma resposta de erro.
+Falhas HTTP com corpo ainda incompleto encerram a conexão após a resposta.
+Uma falha após promover o vídeo e antes de concluir os metadados pode deixar
+um vídeo completo órfão. Diretórios vazios, falhas na própria remoção e crashes
+abruptos ficam para a retenção; contam na quota pelos arquivos existentes.
+Falha de storage retorna 500 sem expor caminhos; falha na recuperação impede
+iniciar a API e falha na limpeza periódica é registrada no log.
+Um timeout no cliente pode ocorrer depois de a API salvar o arquivo; repetir
+o envio cria outro upload.
+
+### Estado e consumo seguro
+
+Os status persistidos são `uploaded`, `queued`, `processing`, `failed` e
+`completed`. O POST continua retornando `uploaded`. As transições são internas,
+através de `transitionUpload(id, status)`, sem endpoint de mutação público:
+
+| Origem | Destinos permitidos |
+| --- | --- |
+| `uploaded` | `queued`, `failed` |
+| `queued` | `processing`, `failed` |
+| `processing` | `completed`, `failed` |
+| `completed` | `failed` (por exemplo, corrupção posterior) |
+| `failed` | nenhum |
+
+Transições inválidas retornam erro 409. A atualização usa JSON parcial e troca
+atômica do metadado existente, antes de atualizar o índice. Status são contratos
+para a futura integração: não há jobs enviados, fila ou processamento automático.
+
+`consumeUpload(id, callback)` protege o arquivo da limpeza, abre um handle somente
+para leitura e chama `verifyUploadIntegrity` antes do callback. Essa função relê
+o vídeo em streaming e compara tamanho e SHA-256 persistido, além de detectar
+mudanças durante a verificação. O callback recebe o mesmo handle verificado,
+não um caminho interno; deve ler desde a posição zero (por exemplo, `readFile`
+ou `createReadStream({ start: 0, autoClose: false })`) e concluir o consumo antes
+de retornar. O handle é fechado automaticamente. Usar um handle não impede
+alterações in-place por outro processo: o diretório continua exigindo controle privado.
+
+Integridade é recalculada somente quando há consumo explícito, nunca em GET,
+limpeza ou recuperação do índice. Cada novo consumo verifica novamente porque
+o arquivo pode ter sido alterado desde o anterior. Checksum inválido ou arquivo
+indisponível bloqueia o callback e marca `failed` de forma persistente. Uploads
+legados sem checksum são rejeitados no consumo com 409 e exigem novo envio.
+Status `failed` não pode ser consumido. Uma exceção do callback após verificação
+não altera status automaticamente; a futura integração decide o resultado.
+Consumo não pode ocorrer duas vezes ao mesmo tempo no mesmo upload, e transições
+externas são bloqueadas enquanto ele está em uso. O pin é liberado ao retornar
+ou falhar; um arquivo expirado fica protegido apenas enquanto estiver em uso.
+O consumo é uma função interna, sem rota pública e sem consumidor real conectado.
+
+Para conferir recuperação, envie um vídeo, guarde o ID, reinicie apenas a API
+e repita `GET /uploads/:id`. Para testar retenção curta em ambiente de teste,
+configure `UPLOAD_RETENTION_MS=10000` e `UPLOAD_CLEANUP_INTERVAL_MS=1000` antes
+de iniciar; isso também pode remover uploads antigos existentes na pasta.
+
+### Preparação do worker
+
+`jobs/video-job.ts` cria um job `process-video`, com ID próprio, `uploadId`,
+data e status `pending`. `processors/video-processor.ts` representa a preparação
+e mantém o job pendente com processamento desabilitado. Não existe transporte
+API → worker, fila, descoberta de arquivos ou execução automática de jobs.
+Não é necessário iniciar o worker para usar o upload.
+
+Por padrão, o proxy aponta para `http://127.0.0.1:3001`. Se mudar a porta da API,
+defina `API_BASE_URL` no ambiente do web antes de iniciar ou compilar o Next.js.
+Nenhum arquivo de ambiente é carregado pela API automaticamente.
+
+Validação sem iniciar servidores:
+
+```powershell
+pnpm.cmd typecheck
+pnpm.cmd build
+node --test apps/api/tests/video-upload.test.mjs apps/api/tests/upload-storage.test.mjs apps/api/tests/upload-stream.test.mjs apps/api/tests/upload-lifecycle.test.mjs apps/api/tests/upload-limits.test.mjs apps/api/tests/youtube-ingestion.test.mjs apps/api/tests/youtube-security.test.mjs apps/worker/tests/video-job.test.mjs
+node --experimental-strip-types --test apps/web/tests/upload-proxy.test.ts apps/web/tests/upload-validation.test.ts apps/web/tests/youtube-ingestion.test.ts
+```
+
+O teste usa `Fastify.inject` sobre a API compilada e cobre recebimento, formatos,
+limites, persistência dos bytes, consulta, nomes maliciosos, colisões, falhas de
+storage, recuperação do índice e preservação de `/health` e `/about`. Os testes
+de armazenamento cobrem JSON persistente, expiração, limpeza periódica, quota
+concorrente, parciais, entradas inválidas e segurança de caminhos. O teste do
+worker cobre criação e permanência do job pendente. Os testes criam pastas
+isoladas `clipador-*-test-*` no temporário do sistema e preservam as pastas de
+teste. Os testes de retenção removem apenas seus uploads gerados para validar
+a limpeza autorizada. Typecheck e build geram os artefatos usuais. O typecheck web usa os
+tipos gerados em `.next/types`, excluindo a cópia de desenvolvimento para evitar
+declarações duplicadas quando as duas pastas existem. Os testes de streaming
+cobrem SHA-256, escrita antes do fim da fonte, backpressure, vazio, interrupção,
+cancelamento, limite sem Content-Length, quota durante envio, remoção do parcial,
+falha de sync, escritas curtas e recuperação do checksum. Os testes do proxy
+conferem encaminhamento do mesmo stream, respostas de erro e cancelamento.
+O comando nativo de teste TypeScript do proxy exige Node 22.6+; foi validado
+com Node 24, sem instalar ferramenta. Nenhum teste inicia servidor de rede.
+Os testes de ciclo de vida cobrem gravações paralelas, limite 429, timeout 408,
+remoção de parcial, liberação de vagas, reservas compartilhadas, proteção contra
+limpeza, integridade válida e inválida, consumo de arquivo corrompido e transições
+persistentes de status. Não foi feito teste de carga nem medição de throughput.
+
+Para comparar manualmente o SHA-256 local com o retornado pelo GET:
+
+```powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath 'C:\caminho\video.mp4'
+```
+
+O PowerShell pode exibir letras maiúsculas; a API retorna letras minúsculas.
+
+Inspeção técnica e preparação de áudio foram adicionadas como primeiro bloco
+do processamento. Veja [pipeline de vídeo](docs/video-processing.md) para
+arquitetura, contratos, quota, timeout, smoke test e a autorização necessária
+antes de instalar a engine de transcrição.

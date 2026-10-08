@@ -1,0 +1,8 @@
+.form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.form label { font-size: .875rem; font-weight: 550; }
+.form p { margin: 0; }
+.form > p { color: var(--muted); font-size: .8rem; }
+.form input { width: 100%; min-width: 0; padding: 1rem; border: 1px solid #3d3f48; border-radius: .65rem; background: #111215; color: var(--text); font: inherit; font-size: .95rem; }
+.form input::placeholder { color: #858793; }
+.form input:disabled { opacity: .6; }
+.form code { font-size: .75rem; overflow-wrap: anywhere; }

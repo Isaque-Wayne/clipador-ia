@@ -1,0 +1,8 @@
+.panel { padding: 2rem; border: 1px solid #ffffff12; border-radius: 1.25rem; background: #191a1fdb; backdrop-filter: blur(20px); box-shadow: 0 16px 48px #00000024, inset 0 1px 0 #ffffff04; }
+.panel > h2 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; margin: 0 0 .4rem; }
+.panel > p { margin: 0 0 1.5rem; font-size: .875rem; color: var(--muted); }
+.selector { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; padding: .3rem; border-radius: .75rem; background: #111215; }
+.selector button { padding: .8rem .5rem; border: 0; border-radius: .5rem; background: transparent; color: var(--muted); font: inherit; font-size: .875rem; font-weight: 550; cursor: pointer; }
+.selector button[aria-pressed="true"] { background: #33303f; color: #e3dbff; }
+.selector button:hover:not(:disabled) { color: #f3efff; }
+@media (max-width: 480px) { .panel { padding: 1.25rem; } .selector button { font-size: .8rem; } }
