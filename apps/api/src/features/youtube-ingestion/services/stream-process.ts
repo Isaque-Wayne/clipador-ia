@@ -3,8 +3,9 @@ import { Readable } from "node:stream";
 import type { OpenedVideo } from "../../uploads/services/persist-video-input.js";
 import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 import { downloaderError } from "../utils/downloader-error.js";
+import { terminateProcessTree } from "../../pipeline/services/terminate-process-tree.js";
 export interface TransferSummary { bytesReceived: number; elapsedMs: number; exitCode: number | null; stderr: string }
-export interface ProcessStreamOptions { launch?: typeof spawn; inputFd?: number; onDiagnostic?: (message: string) => void; onTransfer?: (summary: TransferSummary) => void; mapFailure?: (stderr: string, code: number) => UploadValidationError }
+export interface ProcessStreamOptions { launch?: typeof spawn; inputFd?: number; onDiagnostic?: (message: string) => void; onProgress?: (bytesReceived: number) => void; onTransfer?: (summary: TransferSummary) => void; mapFailure?: (stderr: string, code: number) => UploadValidationError }
 export async function openProcessStream(executable: string, args: string[], signal: AbortSignal, options: ProcessStreamOptions = {}): Promise<OpenedVideo> {
   signal.throwIfAborted();
     const started = performance.now();
@@ -13,7 +14,7 @@ export async function openProcessStream(executable: string, args: string[], sign
     });
     const stdout = child.stdout;
     const stderrStream = child.stderr;
-    if (!stdout || !stderrStream) { child.kill("SIGKILL"); throw new UploadValidationError("Não foi possível abrir o stream do downloader.", 503); }
+    if (!stdout || !stderrStream) { await terminateProcessTree(child); throw new UploadValidationError("Não foi possível abrir o stream do downloader.", 503); }
     let stderr = "";
     let processError: Error | undefined;
     let closed = false;
@@ -28,7 +29,7 @@ export async function openProcessStream(executable: string, args: string[], sign
     });
     // Drenar stderr independentemente do consumidor de vídeo; preservar a cauda com o erro final.
     stderrStream.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-16_384); });
-    const stop = () => { if (!closed) child.kill("SIGKILL"); stdout.destroy(); };
+    const stop = () => { if (!closed) void terminateProcessTree(child); stdout.destroy(); };
     const aborted = () => stop();
     signal.addEventListener("abort", aborted, { once: true });
     if (signal.aborted) stop();
@@ -40,6 +41,7 @@ export async function openProcessStream(executable: string, args: string[], sign
           signal.throwIfAborted();
           if (!Buffer.isBuffer(chunk)) throw new UploadValidationError("O downloader retornou um stream inválido.", 502);
           bytesReceived += chunk.length;
+          options.onProgress?.(bytesReceived);
           yield chunk;
         }
         const result = await completion;
@@ -63,6 +65,7 @@ export async function openProcessStream(executable: string, args: string[], sign
       stop();
       content.destroy();
       const result = await completion;
+      await terminateProcessTree(child);
       signal.removeEventListener("abort", aborted);
       if (!reported) {
         reported = true;

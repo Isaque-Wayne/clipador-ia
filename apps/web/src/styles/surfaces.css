@@ -1,0 +1,21 @@
+/* Outer surfaces blur; nested panels use translucent fills. */
+.glass-surface, .glass-panel, .glass-elevated, .glass-subtle {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-inset);
+  background: var(--glass-opaque);
+}
+.glass-surface { box-shadow: var(--shadow), var(--shadow-inset); }
+.glass-elevated { box-shadow: var(--shadow-elevated), var(--shadow-inset); }
+.glass-panel { background: var(--glass-panel-background); }
+.glass-subtle { background: var(--glass-subtle-background); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel, .glass-subtle { background: var(--glass-opaque); }
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-surface { background: var(--glass-background); -webkit-backdrop-filter: blur(var(--blur)); backdrop-filter: blur(var(--blur)); }
+  .glass-elevated { background: var(--glass-elevated-background); -webkit-backdrop-filter: blur(var(--blur-elevated)); backdrop-filter: blur(var(--blur-elevated)); }
+}
+@media (max-width: 600px), (prefers-reduced-transparency: reduce) {
+  .glass-surface, .glass-panel, .glass-elevated, .glass-subtle { background: var(--glass-opaque); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

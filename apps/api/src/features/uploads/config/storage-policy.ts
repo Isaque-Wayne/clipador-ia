@@ -1,5 +1,6 @@
 import type { UploadOptions } from "../types/upload.js";
 import { resolveUploadLimits } from "../../../../../../config/upload-limits.mjs";
+import { resolvePipelineTimeouts } from "../../../../../../config/pipeline-timeouts.mjs";
 
 function positiveInteger(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
@@ -21,7 +22,7 @@ export function storagePolicy(options: UploadOptions) {
     quotaBytes: positiveInteger(options.quotaBytes, resolveUploadLimits(process.env).quotaBytes),
     now: options.now ?? Date.now,
     maxConcurrentUploads: positiveInteger(options.maxConcurrentUploads, environmentInteger("UPLOAD_MAX_CONCURRENT") ?? 2),
-    uploadTimeoutMs: positiveInteger(options.uploadTimeoutMs, environmentInteger("UPLOAD_TIMEOUT_MS") ?? 90_000),
+    uploadTimeoutMs: positiveInteger(options.uploadTimeoutMs, resolvePipelineTimeouts().upload),
   };
   if (policy.cleanupIntervalMs > 2_147_483_647) throw new Error("Intervalo de limpeza excede o limite de temporizadores do Node.js.");
   if (policy.uploadTimeoutMs > 2_147_483_647) throw new Error("Timeout excede o limite de temporizadores do Node.js.");

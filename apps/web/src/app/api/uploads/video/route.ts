@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+import { resolvePipelineTimeouts } from "../../../../../../../config/pipeline-timeouts.mjs";
 
 export async function POST(request: Request): Promise<Response> {
   if (!request.body) return Response.json({ success: false, message: "O vídeo está vazio." }, { status: 400 });
@@ -9,7 +10,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const options: RequestInit & { duplex: "half" } = {
     method: "POST", headers, body: request.body, duplex: "half",
-    signal: AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]),
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(resolvePipelineTimeouts().upload + 15_000)]),
     redirect: "error",
   };
   try {

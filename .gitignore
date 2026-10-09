@@ -14,3 +14,8 @@ apps/api/.data/
 tools/yt-dlp/yt-dlp.exe
 tools/ffmpeg/bin/
 tools/ffmpeg/downloads/*.zip
+tools/transcription/python/
+tools/transcription/venv/
+tools/transcription/models/
+tools/transcription/downloads/*.zip
+**/__pycache__/

@@ -1,0 +1,230 @@
+{
+  "python": {
+    "version": "3.13.15",
+    "architecture": "AMD64",
+    "origin": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.zip",
+    "license": "PSF-2.0",
+    "sha256": "6479223746cdfb79d25865110d6f524ac98de081324e119af1dc3ae36bddc7a5"
+  },
+  "engine": {
+    "name": "faster-whisper",
+    "version": "1.2.1",
+    "origin": "https://pypi.org/project/faster-whisper/1.2.1/",
+    "license": "MIT",
+    "device": "cpu",
+    "computeType": "int8"
+  },
+  "model": {
+    "name": "small",
+    "multilingual": true,
+    "origin": "https://huggingface.co/Systran/faster-whisper-small",
+    "revision": "536b0662742c02347bc0e980a01041f333bce120",
+    "license": "MIT",
+    "bytes": 486214370,
+    "files": [
+      {
+        "name": "model.bin",
+        "bytes": 483546902,
+        "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
+      },
+      {
+        "name": "config.json",
+        "bytes": 2370,
+        "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828"
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 2203239,
+        "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab"
+      },
+      {
+        "name": "vocabulary.txt",
+        "bytes": 459861,
+        "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913"
+      },
+      {
+        "name": "README.md",
+        "bytes": 1998,
+        "sha256": "329373481008c7c38654aff8ecdcf0163c211557cc7ba8e2ef6f2f84b4f75ec8"
+      }
+    ]
+  },
+  "packages": [
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "license": "MIT",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "av",
+      "version": "16.1.0",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "license": "MPL-2.0",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+      ]
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "license": null,
+      "licenseClassifiers": [
+        "License :: OSI Approved :: BSD License"
+      ]
+    },
+    {
+      "name": "ctranslate2",
+      "version": "4.8.2",
+      "license": "MIT",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "faster-whisper",
+      "version": "1.2.1",
+      "license": "MIT",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: MIT License"
+      ]
+    },
+    {
+      "name": "filelock",
+      "version": "4.0.12",
+      "license": "MIT",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: MIT License"
+      ]
+    },
+    {
+      "name": "flatbuffers",
+      "version": "25.12.19",
+      "license": "Apache 2.0",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ]
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license": "MIT",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: MIT License"
+      ]
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.7.0",
+      "license": "Apache-2.0",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ]
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: BSD License"
+      ]
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: BSD License"
+      ]
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "1.33.0",
+      "license": "Apache-2.0",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "license": "BSD-3-Clause",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.3",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.30.0",
+      "license": "MIT License",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: MIT License"
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "pip",
+      "version": "26.2.1",
+      "license": "MIT",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2",
+      "license": "3-Clause BSD License",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "license": "MIT",
+      "licenseClassifiers": [
+        "License :: OSI Approved :: MIT License"
+      ]
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.23.2",
+      "license": null,
+      "licenseClassifiers": [
+        "License :: OSI Approved :: Apache Software License"
+      ]
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.1",
+      "license": "MPL-2.0 AND MIT",
+      "licenseClassifiers": []
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0",
+      "licenseClassifiers": []
+    }
+  ]
+}

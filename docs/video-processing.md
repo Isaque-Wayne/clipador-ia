@@ -1,5 +1,9 @@
 # Processamento de vídeo — primeiro bloco
 
+Este documento registra o primeiro bloco de preparação. A engine local foi
+posteriormente instalada e a transcrição real validada; o estado atual e as
+rotas estão em [transcrição e análise](transcription.md).
+
 ## Estado entregue
 
 Ingestão → verificação SHA-256 → inspeção técnica → metadata persistente → áudio para ASR → callback consumidor → cleanup.
@@ -63,8 +67,9 @@ docs/video-processing.md
   crash, áudio órfão conta quota e expira com a retenção do upload, sem invalidar
   o vídeo original já publicado. Colisão não sobrescreve nem apaga arquivo preexistente.
 - Preparação protege o upload da retenção e compartilha as vagas existentes
-  de concorrência. Usa timeout próprio de 300.000 ms, configurável por
-  `VIDEO_PREPARATION_TIMEOUT_MS`, sem mudar os 90 segundos de upload.
+  de concorrência. Preparação de áudio usa prazo de 1.200.000 ms configurável por
+  `VIDEO_PREPARATION_TIMEOUT_MS`; Whisper, análise e render recebem prazos próprios,
+  sem herdar esse teto externo. Veja [vídeos longos](long-videos.md).
 - Comandos usam executáveis verificados, spawn sem shell e argumentos separados.
   Cada ferramenta recebe um descritor regular via stdin e protocolo `fd:`,
   com suporte a seek. Identidade, tamanho e tempos são comparados com o

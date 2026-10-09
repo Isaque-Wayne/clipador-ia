@@ -4,11 +4,13 @@ import { isUploadId } from "../../uploads/utils/upload-names.js";
 import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 
 type IngestionService = ReturnType<typeof createYouTubeIngestion>;
-export function createIngestController(service: IngestionService) {
+export function createIngestController(service: IngestionService, detached = false) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const body: unknown = request.body;
     if (typeof body !== "object" || body === null || Array.isArray(body)
       || Object.keys(body).some((key) => key !== "url")) throw new UploadValidationError("Envie somente o campo URL do YouTube.");
+    if (detached) return reply.code(202).header("Cache-Control", "no-store").send({ success: true,
+      ingestion: service.start((body as Record<string, unknown>)["url"]) });
     const abort = new AbortController();
     const disconnected = () => { if (!reply.raw.writableFinished) abort.abort(); };
     reply.raw.once("close", disconnected);
@@ -20,10 +22,10 @@ export function createIngestController(service: IngestionService) {
   };
 }
 
-export function createIngestionQueryController(service: IngestionService) {
+export function createIngestionQueryController(service: IngestionService, cancel = false) {
   return async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     if (!isUploadId(request.params.id)) throw new UploadValidationError("ID da ingestão inválido.");
-    const ingestion = service.find(request.params.id);
+    const ingestion = cancel ? await service.cancel(request.params.id) : service.find(request.params.id);
     if (!ingestion) throw new UploadValidationError("Ingestão não encontrada ou expirada.", 404);
     return reply.header("Cache-Control", "no-store").send({ success: true, ingestion });
   };

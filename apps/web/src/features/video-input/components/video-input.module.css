@@ -1,8 +1,9 @@
-.panel { padding: 2rem; border: 1px solid #ffffff12; border-radius: 1.25rem; background: #191a1fdb; backdrop-filter: blur(20px); box-shadow: 0 16px 48px #00000024, inset 0 1px 0 #ffffff04; }
-.panel > h2 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; margin: 0 0 .4rem; }
-.panel > p { margin: 0 0 1.5rem; font-size: .875rem; color: var(--muted); }
-.selector { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; padding: .3rem; border-radius: .75rem; background: #111215; }
-.selector button { padding: .8rem .5rem; border: 0; border-radius: .5rem; background: transparent; color: var(--muted); font: inherit; font-size: .875rem; font-weight: 550; cursor: pointer; }
-.selector button[aria-pressed="true"] { background: #33303f; color: #e3dbff; }
-.selector button:hover:not(:disabled) { color: #f3efff; }
-@media (max-width: 480px) { .panel { padding: 1.25rem; } .selector button { font-size: .8rem; } }
+.panel { padding: var(--space-6); }
+.panel > h2 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; margin: 0 0 var(--space-2); }
+.panel > p { margin: 0 0 var(--space-5); font-size: .875rem; color: var(--text-secondary); }
+.selector { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--glass-border); border-radius: var(--radius-control); background: rgba(0, 0, 0, .16); }
+.selector button { min-height: 2.75rem; padding: var(--space-3) var(--space-2); border: 1px solid transparent; border-radius: var(--radius-small); background: transparent; color: var(--text-secondary); font: inherit; font-size: .875rem; font-weight: 550; cursor: pointer; transition: background var(--duration), border-color var(--duration); }
+.selector button[aria-pressed="true"] { background: var(--hover); border-color: var(--hover-border); box-shadow: var(--shadow-inset); color: var(--text-primary); }
+.selector button:hover:not(:disabled) { background: var(--hover); color: var(--text-primary); }
+.selector button:active:not(:disabled) { background: var(--glass-panel-background); }
+@media (max-width: 480px) { .panel { padding: var(--space-4); } .selector button { font-size: .8rem; } }

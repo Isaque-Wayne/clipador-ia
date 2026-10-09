@@ -10,8 +10,8 @@ import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 export function createYouTubeDownloader(onFailure?: (message: string) => void, onInfo?: (value: unknown) => void,
   onTransfer?: (summary: TransferSummary) => void): YouTubeDownloader {
   const resolveInfo = createYtdlpRunner(onFailure);
-  const openStream = createYtdlpStream({ ...(onFailure ? { onDiagnostic: onFailure } : {}), ...(onTransfer ? { onTransfer } : {}) });
-  return { async prepare(reference, signal, onStatus) {
+  return { async prepare(reference, signal, onStatus, onProgress) {
+    const openStream = createYtdlpStream({ ...(onFailure ? { onDiagnostic: onFailure } : {}), ...(onTransfer ? { onTransfer } : {}), ...(onProgress ? { onProgress } : {}) });
     const info = await resolveInfo(reference, signal);
     onInfo?.(info);
     const { extension, selection, ...input } = parseVideoInfo(info, reference);
@@ -20,7 +20,7 @@ export function createYouTubeDownloader(onFailure?: (message: string) => void, o
       validateOutput: (path, outputSignal) => validateMergedOutput(path, outputSignal, input.source.durationSeconds),
       open: (downloadSignal, context) => {
         if (!context) throw new UploadValidationError("Workspace de merge indisponível.", 500);
-        return mergeVideo(reference, selection, context, downloadSignal, onStatus, onFailure, onTransfer);
+        return mergeVideo(reference, selection, context, downloadSignal, onStatus, onFailure, onTransfer, {}, onProgress);
       } };
   } };
 }

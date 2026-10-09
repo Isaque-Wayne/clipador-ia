@@ -11,7 +11,8 @@ export class UploadIntegrityError extends UploadValidationError {
   constructor(message = "A integridade do vídeo armazenado não pôde ser confirmada.") { super(message, 409); }
 }
 
-export async function openVerifiedUpload(root: string, metadata: UploadMetadata): Promise<FileHandle> {
+export async function openVerifiedUpload(root: string, metadata: UploadMetadata, signal = new AbortController().signal): Promise<FileHandle> {
+  signal.throwIfAborted();
   if (!parseUploadMetadata(metadata, metadata.id)) throw new UploadIntegrityError();
   if (!metadata.checksum) throw new UploadIntegrityError("Upload antigo sem checksum. Envie o vídeo novamente antes de consumi-lo.");
   const directory = await uploadPath(root, metadata.id);
@@ -22,20 +23,26 @@ export async function openVerifiedUpload(root: string, metadata: UploadMetadata)
   try {
     const opened = await file.stat();
     if (opened.dev !== stat.dev || opened.ino !== stat.ino || opened.size !== metadata.file.size) throw new UploadIntegrityError();
-    await verifyUploadIntegrity(file, metadata);
+    await verifyUploadIntegrity(file, metadata, signal);
     return file;
   } catch (error: unknown) { await file.close(); throw error; }
 }
 
-export async function verifyUploadIntegrity(file: FileHandle, metadata: UploadMetadata): Promise<void> {
+export async function verifyUploadIntegrity(file: FileHandle, metadata: UploadMetadata, signal = new AbortController().signal): Promise<void> {
+  signal.throwIfAborted();
   if (!metadata.checksum) throw new UploadIntegrityError("Upload sem checksum persistido.");
   const before = await file.stat();
   const hash = createHash("sha256");
   let size = 0;
-  for await (const chunk of file.createReadStream({ start: 0, autoClose: false })) {
-    hash.update(chunk);
-    size += chunk.length;
-  }
+  const stream = file.createReadStream({ start: 0, autoClose: false });
+  const aborted = () => stream.destroy(signal.reason);
+  signal.addEventListener("abort", aborted, { once: true });
+  if (signal.aborted) aborted();
+  try {
+    for await (const chunk of stream) { signal.throwIfAborted(); hash.update(chunk); size += chunk.length; }
+    signal.throwIfAborted();
+  } catch (error) { if (signal.aborted) throw signal.reason; throw error; }
+  finally { signal.removeEventListener("abort", aborted); }
   const after = await file.stat();
   if (size !== metadata.file.size || hash.digest("hex") !== metadata.checksum.value
     || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {

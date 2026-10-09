@@ -5,6 +5,7 @@ import type { UploadChecksum } from "../types/upload.js";
 import { assertStorageQuota } from "./storage-quota.js";
 import { validateVideoSize, UploadValidationError } from "../utils/validate-video.js";
 import { readUploadStream } from "./read-upload-stream.js";
+import { withStageDeadline } from "../../pipeline/services/stage-deadline.js";
 
 export async function writeVideoStream(source: Readable, file: FileHandle, availableBytes: number,
   signal: AbortSignal, expectedSize?: number, reserveBytes?: (size: number) => void): Promise<{ size: number; checksum: UploadChecksum }> {
@@ -32,7 +33,7 @@ export async function writeVideoStream(source: Readable, file: FileHandle, avail
   if (expectedSize !== undefined && size !== expectedSize) {
     throw new UploadValidationError("O tamanho recebido não corresponde ao tamanho informado.");
   }
-  await file.sync();
+  await withStageDeadline("storage", signal, async signal => { await file.sync(); signal.throwIfAborted(); });
   signal.throwIfAborted();
   return { size, checksum: { algorithm: "sha256", value: hash.digest("hex") } };
 }

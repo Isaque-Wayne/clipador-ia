@@ -1,0 +1,18 @@
+.panel { padding: clamp(1rem, 3vw, 1.6rem); display: grid; gap: .8rem; min-width: 0; }
+.panel h2, .panel h3, .panel p { margin: 0; }
+.panel h2 { font-size: 1.3rem; }
+.hint { color: var(--text-secondary); font-size: .9rem; line-height: 1.6; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 1rem; }
+.clip { overflow: hidden; min-width: 0; }
+.clip video { display: block; width: 100%; max-height: 480px; aspect-ratio: 9 / 16; background: #10121c; object-fit: contain; }
+.body { padding: 1rem; display: grid; gap: .85rem; }
+.body h3 { font-size: 1rem; overflow-wrap: anywhere; }
+.body p { font-size: .86rem; line-height: 1.5; }
+.metrics { display: flex; flex-wrap: wrap; gap: .5rem; color: var(--text-secondary); }
+.metrics span { color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.actions a { font-size: .84rem; padding: .6rem .8rem; }
+.error { display: grid; gap: .75rem; color: var(--error); }
+.filters { display: flex; flex-wrap: wrap; gap: .8rem; }
+.filters label { display: grid; gap: .4rem; color: var(--text-secondary); font-size: .9rem; }
+.filters select { min-width: 145px; padding: .6rem .8rem; }

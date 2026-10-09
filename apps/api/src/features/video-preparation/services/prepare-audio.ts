@@ -8,6 +8,7 @@ import type { VideoInspection } from "../types/inspection.js";
 import { validatePreparedAudio } from "./validate-prepared-audio.js";
 import { openMediaInput } from "./open-media-input.js";
 import type { MediaInput } from "../types/preparation.js";
+import { createStageDeadline } from "../../pipeline/services/stage-deadline.js";
 
 export async function withPreparedAudio<T>(input: MediaInput, directory: string, inspection: VideoInspection,
   signal: AbortSignal, reserve: (bytes: number) => void, consumer: (audioPath: string) => Promise<T>): Promise<T> {
@@ -19,6 +20,8 @@ export async function withPreparedAudio<T>(input: MediaInput, directory: string,
   reserve(maximum);
   const output = join(directory, "audio-asr.wav.part");
   const file = await open(output, "wx", 0o600);
+  const deadline = createStageDeadline("preparation", signal);
+  signal = deadline.signal;
   try {
     const source = await openMediaInput(input);
     try {
@@ -31,8 +34,11 @@ export async function withPreparedAudio<T>(input: MediaInput, directory: string,
     await file.close();
     signal.throwIfAborted();
     await validatePreparedAudio(output, inspection.durationSeconds, signal);
+    deadline.check();
+    deadline.dispose(); // The consumer (Whisper) owns a different stage budget.
     return await consumer(output);
   } finally {
+    deadline.dispose();
     await file.close();
     const stat = await lstat(output);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Temporário de áudio inseguro.");

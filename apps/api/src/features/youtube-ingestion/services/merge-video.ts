@@ -17,7 +17,7 @@ export interface MergeDependencies {
 }
 export async function mergeVideo(reference: YouTubeReference, selection: Extract<VideoInputSelection, { mode: "separate" }>,
   context: StagingContext, signal: AbortSignal, onStatus?: (status: IngestionStatus) => void,
-  onDiagnostic?: (message: string) => void, onTransfer?: (summary: TransferSummary) => void, dependencies: MergeDependencies = {}): Promise<OpenedVideo> {
+  onDiagnostic?: (message: string) => void, onTransfer?: (summary: TransferSummary) => void, dependencies: MergeDependencies = {}, onProgress?: (bytes: number) => void): Promise<OpenedVideo> {
   const created: string[] = [];
   let stored = 0;
   const clean = async () => {
@@ -29,7 +29,8 @@ export async function mergeVideo(reference: YouTubeReference, selection: Extract
     }
     created.length = 0;
   };
-  const download = dependencies.download ?? createYtdlpStream({ ...(onDiagnostic ? { onDiagnostic } : {}), ...(onTransfer ? { onTransfer } : {}) });
+  const download = dependencies.download ?? createYtdlpStream({ ...(onDiagnostic ? { onDiagnostic } : {}), ...(onTransfer ? { onTransfer } : {}),
+    ...(onProgress ? { onProgress: bytes => onProgress(stored + bytes) } : {}) });
   try {
     for (const [kind, track] of [["video", selection.video], ["audio", selection.audio]] as const) {
       signal.throwIfAborted();

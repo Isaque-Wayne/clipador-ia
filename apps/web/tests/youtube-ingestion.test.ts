@@ -22,7 +22,7 @@ test("proxy YouTube encaminha JSON, stream e cancelamento sem aceitar destino li
   const abort = new AbortController();
   const request = new Request("http://localhost/api/ingestions/youtube", { method: "POST", body: JSON.stringify({ url: "https://youtu.be/BaW_jenozKc" }), signal: abort.signal });
   t.mock.method(globalThis, "fetch", async (url: string | URL | Request, options?: RequestInit) => {
-    assert.equal(String(url), "http://127.0.0.1:3001/ingestions/youtube");
+    assert.equal(String(url), "http://127.0.0.1:3001/ingestions/youtube/jobs");
     assert.equal(options?.body, request.body);
     assert.equal(options?.redirect, "error");
     abort.abort(); assert.equal(options?.signal?.aborted, true);

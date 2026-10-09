@@ -3,13 +3,13 @@ import styles from "./product-preview.module.css";
 export function ProductPreview() {
   return (
     <figure className={styles["preview"]} aria-labelledby="product-preview-caption">
-      <div className={styles["window"]} aria-hidden="true">
+      <div className={`${styles["window"]} glass-surface`} aria-hidden="true">
         <div className={styles["toolbar"]}>
           <span className={styles["windowMark"]}>◧</span>
           <span>Do vídeo ao corte</span>
           <span className={styles["concept"]}>VISÃO DO PRODUTO</span>
         </div>
-        <div className={styles["original"]}>
+        <div className={`${styles["original"]} glass-subtle`}>
           <span className={styles["label"]}>01 / VÍDEO ORIGINAL</span>
           <div className={styles["landscape"]}>
             <svg viewBox="0 0 400 180" fill="none" preserveAspectRatio="xMidYMid slice">

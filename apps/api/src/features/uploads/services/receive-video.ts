@@ -23,13 +23,15 @@ export function createUploadService(options: UploadOptions = {}) {
   const operations = new Set<Promise<unknown>>();
 
   async function receivePreparedVideo(prepare: (signal: AbortSignal) => Promise<PreparedVideo>,
-    signal = new AbortController().signal, id: string = randomUUID()): Promise<UploadSuccess> {
+    signal = new AbortController().signal, id: string = randomUUID(), budget: { timeoutMs?: number | null } = {}): Promise<UploadSuccess> {
     let release: (() => void) | undefined;
     let deadline: ReturnType<typeof createUploadTimeout> | undefined;
     try {
       release = concurrency.acquire();
-      deadline = createUploadTimeout(signal, policy.uploadTimeoutMs);
-      signal = deadline.signal;
+      if (budget.timeoutMs !== null) {
+        deadline = createUploadTimeout(signal, budget.timeoutMs ?? policy.uploadTimeoutMs);
+        signal = deadline.signal;
+      }
       signal.throwIfAborted();
       const input = await prepare(signal);
       signal.throwIfAborted();
@@ -64,12 +66,12 @@ export function createUploadService(options: UploadOptions = {}) {
   }
 
   const consume = createUploadConsumer(coordinator);
-  async function prepareUpload<T>(id: string, operation: (context: PreparationContext) => Promise<T>, parent: AbortSignal): Promise<T> {
+  async function prepareUpload<T>(id: string, operation: (context: PreparationContext) => Promise<T>, parent: AbortSignal, budget: { timeoutMs?: number | null }): Promise<T> {
     const release = concurrency.acquire();
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      timer = setTimeout(() => abort.abort(new UploadValidationError("Tempo máximo de preparação do vídeo excedido.", 408)), preparationTimeoutMs());
+      if (budget.timeoutMs !== null) timer = setTimeout(() => abort.abort(new UploadValidationError("Tempo máximo de preparação do vídeo excedido.", 408)), budget.timeoutMs ?? preparationTimeoutMs());
       const signal = AbortSignal.any([parent, abort.signal]);
       signal.throwIfAborted();
       return await consume(id, async ({ metadata, file }) => {
@@ -82,7 +84,7 @@ export function createUploadService(options: UploadOptions = {}) {
           persistInspection: (inspection) => coordinator.persistInspection(id, inspection) });
         signal.throwIfAborted();
         return result;
-      });
+      }, signal);
     } finally {
       if (timer) clearTimeout(timer);
       try { await coordinator.refresh(); } finally { release(); }
@@ -93,9 +95,9 @@ export function createUploadService(options: UploadOptions = {}) {
     findUpload: coordinator.find, initialize: coordinator.refresh, cleanup: coordinator.refresh,
     transitionUpload: (id: string, status: UploadStatus) => track(coordinator.transition(id, status)),
     consumeUpload: <T>(...args: Parameters<typeof consume<T>>) => track(consume<T>(...args)),
-    prepareUpload: <T>(id: string, operation: (context: PreparationContext) => Promise<T>, signal = new AbortController().signal) => track(prepareUpload(id, operation, signal)),
+    prepareUpload: <T>(id: string, operation: (context: PreparationContext) => Promise<T>, signal = new AbortController().signal, budget: { timeoutMs?: number | null } = {}) => track(prepareUpload(id, operation, signal, budget)),
     drain: async () => { await Promise.allSettled([...operations]); await coordinator.drain(); },
-    cleanupIntervalMs: policy.cleanupIntervalMs, now: policy.now, retentionMs: policy.retentionMs };
+    cleanupIntervalMs: policy.cleanupIntervalMs, now: policy.now, retentionMs: policy.retentionMs, maxConcurrentUploads: policy.maxConcurrentUploads };
 }
 
 export type UploadService = ReturnType<typeof createUploadService>;

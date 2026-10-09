@@ -4,9 +4,13 @@ import type { UploadService } from "../../uploads/services/receive-video.js";
 import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 import { mediaConnectionError } from "../utils/downloader-error.js";
 import type { IngestionRecord, YouTubeDownloader } from "../types/ingestion.js";
+import { PipelineTimeoutError, createStageDeadline, withStageDeadline } from "../../pipeline/services/stage-deadline.js";
+import type { YouTubeReference } from "../../../../../../config/youtube-url.mjs";
 
 export function createYouTubeIngestion(uploads: UploadService, downloader: YouTubeDownloader) {
   const transient = new Map<string, IngestionRecord>();
+  const jobs = new Map<string, { abort: AbortController; done: Promise<unknown> }>();
+  let closing = false;
   function prune() {
     for (const [id, record] of transient) {
       if (uploads.now() - Date.parse(record.createdAt) >= uploads.retentionMs && record.status === "failed") transient.delete(id);
@@ -26,23 +30,42 @@ export function createYouTubeIngestion(uploads: UploadService, downloader: YouTu
     const record = transient.get(id);
     return record ? structuredClone(record) : undefined;
   }
-  async function ingest(value: unknown, signal: AbortSignal) {
-    let reference;
-    try { reference = parseYouTubeUrl(value); }
+  function referenceFor(value: unknown) {
+    try { return parseYouTubeUrl(value); }
     catch (error) { throw new UploadValidationError(error instanceof Error ? error.message : "URL inválida."); }
+  }
+  function createRecord(status: IngestionRecord["status"]) {
     prune();
-    const record: IngestionRecord = { id: randomUUID(), createdAt: new Date(uploads.now()).toISOString(), status: "pending" };
+    const record: IngestionRecord = { id: randomUUID(), createdAt: new Date(uploads.now()).toISOString(), status };
     transient.set(record.id, record);
+    return record;
+  }
+  async function execute(reference: YouTubeReference, record: IngestionRecord, signal: AbortSignal, detached = false) {
     try {
       const upload = await uploads.receivePreparedVideo(async (operationSignal) => {
         record.status = "fetching-metadata";
-        const input = await downloader.prepare(reference, operationSignal, (status) => { record.status = status; });
+        const prepare = (signal: AbortSignal) => downloader.prepare(reference, signal, (status) => { record.status = status; }, bytesReceived => {
+          record.progress = { ...record.progress, bytesReceived };
+        });
+        const input = detached ? await withStageDeadline("metadata", operationSignal, prepare) : await prepare(operationSignal);
         if (input.source) record.video = input.source;
+        if (input.estimatedSize !== undefined) record.progress = { bytesReceived: 0, estimatedBytes: input.estimatedSize };
         return { ...input, open: async (downloadSignal, context) => {
           record.status = "downloading";
-          return input.open(downloadSignal, context);
+          if (!detached || input.workspace) return input.open(downloadSignal, context);
+          const deadline = createStageDeadline("download", downloadSignal);
+          try {
+            const opened = await input.open(deadline.signal, context);
+            const aborted = () => opened.content.destroy(deadline.signal.reason);
+            deadline.signal.addEventListener("abort", aborted, { once: true });
+            if (deadline.signal.aborted) aborted();
+            return { ...opened, dispose: async () => {
+              try { await opened.dispose?.(); }
+              finally { deadline.signal.removeEventListener("abort", aborted); deadline.dispose(); }
+            } };
+          } catch (error) { deadline.dispose(); if (deadline.signal.aborted) throw deadline.signal.reason; throw error; }
         } };
-      }, signal, record.id);
+      }, signal, record.id, detached ? { timeoutMs: null } : {});
       transient.delete(record.id);
       return { statusCode: 200, body: { success: true, ingestion: { ...record, createdAt: upload.createdAt, status: "downloaded" as const, upload } } };
     } catch (error) {
@@ -57,9 +80,36 @@ export function createYouTubeIngestion(uploads: UploadService, downloader: YouTu
       const statusCode = error instanceof UploadValidationError ? error.statusCode : 502;
       const message = error instanceof UploadValidationError ? error.message : signal.aborted
         ? "A ingestão foi interrompida." : "Falha interna durante a ingestão do vídeo do YouTube.";
-      record.status = "failed"; record.message = message;
-      return { statusCode, body: { success: false, message, ingestion: structuredClone(record) } };
+      const code = error instanceof PipelineTimeoutError ? error.code : signal.aborted ? "CANCELLED" : "INGESTION_FAILED";
+      record.error = { code, message, stage: error instanceof PipelineTimeoutError ? error.stage : record.status,
+        ...(error instanceof PipelineTimeoutError ? { timeoutMs: error.timeoutMs, elapsedMs: error.elapsedMs } : {}) };
+      record.status = "failed"; record.message = message; record.code = code; record.finishedAt = new Date(uploads.now()).toISOString();
+      return { statusCode, body: { success: false, code, message, ingestion: structuredClone(record) } };
     }
   }
-  return { ingest, find };
+  return {
+    async ingest(value: unknown, signal: AbortSignal) { return execute(referenceFor(value), createRecord("pending"), signal); },
+    find,
+    start(value: unknown) {
+      const reference = referenceFor(value);
+      if (closing || jobs.size >= uploads.maxConcurrentUploads) throw new UploadValidationError("Há ingestões em andamento. Aguarde a conclusão ou cancele uma delas.", 429);
+      const record = createRecord("queued"), abort = new AbortController();
+      const job = { abort, done: Promise.resolve() as Promise<unknown> };
+      jobs.set(record.id, job);
+      job.done = Promise.resolve().then(() => execute(reference, record, abort.signal, true)).finally(() => jobs.delete(record.id));
+      return structuredClone(record);
+    },
+    async cancel(id: string) {
+      const job = jobs.get(id);
+      if (!job) throw new UploadValidationError("Não há ingestão em andamento para cancelar.", 409);
+      job.abort.abort(new UploadValidationError("Ingestão cancelada. Os temporários foram removidos.", 409));
+      await job.done;
+      return find(id);
+    },
+    async close() {
+      closing = true;
+      for (const job of jobs.values()) job.abort.abort(new UploadValidationError("Ingestão interrompida pelo encerramento da API.", 409));
+      await Promise.allSettled([...jobs.values()].map(job => job.done));
+    },
+  };
 }

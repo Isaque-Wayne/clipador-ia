@@ -1,19 +1,19 @@
 # Ingestão por YouTube
 
-Upload local continua disponível em `/upload`. A página oferece **Upload de arquivo** e **Colar link do YouTube**. A troca de modo fica desabilitada enquanto houver uma operação ativa; sair da página cancela a ingestão por link.
+Upload local continua disponível em `/upload`. A página oferece **Upload de arquivo** e **Colar link do YouTube**. A troca de modo fica desabilitada durante uma operação. Sair da página encerra apenas o polling; cancelar exige a ação explícita. Veja [vídeos longos](long-videos.md).
 
 ## Fluxo
 
 1. Web valida o formato e canonicaliza `watch`, `youtu.be` ou `shorts` pelo ID de onze caracteres.
-2. `POST /api/ingestions/youtube` encaminha JSON para `POST /ingestions/youtube` da API. O corpo é limitado a 4 KiB.
+2. `POST /api/ingestions/youtube` encaminha JSON para `POST /ingestions/youtube/jobs` da API. Retorna 202 com ID e passa a consultar `GET /api/ingestions/:id`. Corpo limitado a 4 KiB. O endpoint síncrono antigo permanece para compatibilidade.
 3. API valida novamente e cria um UUID de ingestão. O mesmo UUID identifica o vídeo no storage.
-4. A mesma instância de upload adquire uma vaga e inicia o timeout antes de buscar metadados. Não há fila real ou processo em background.
+4. O job executa sem manter a request inicial aberta e adquire a mesma vaga do upload local. Metadata, download, FFmpeg e FFprobe têm prazos independentes. Não há fila durável ou Redis.
 5. Executável yt-dlp é verificado por SHA-256 e invocado com `spawn`, lista de argumentos e `shell: false`. Somente a URL canônica é passada, após `--`.
 6. yt-dlp consulta metadados em JSON com a lista de formatos, mesmo se não houver progressivo. Um formato HTTPS MP4/WebM com áudio e vídeo juntos tem prioridade e mantém o fluxo aprovado. Sem ele, o seletor procura vídeo MP4 H.264 e áudio AAC/M4A HTTPS para remux MP4 sem reencode; prefere vídeo até 720p/60fps e áudio até 192 kbps. Se não houver vídeo nessa faixa, utiliza a menor resolução H.264 disponível. IDs são obtidos dos metadados, nunca fixados no código.
 7. Tamanho estimado é validado, quando disponível, e quota é reservada antes de abrir a mídia. A duração é registrada quando conhecida; não há limite independente de duração nesta etapa. Transmissões ao vivo/em andamento são rejeitadas.
 8. Após reservar quota, outro processo yt-dlp recebe novamente apenas a URL YouTube canônica e transfere o melhor progressivo do container validado usando `--output -`. Não recebe ID fixo de formato, URL assinada de mídia ou headers fornecidos pelo usuário. `--fixup never` impede correções com FFmpeg. A comunicação com o provedor, headers e desafios JS ficam com o yt-dlp e o Node existente como runtime JS.
 9. Node consome stdout binário por iterador assíncrono, com backpressure e buffer de 64 KiB no wrapper. stderr é drenado separadamente e limitado à cauda de 16 KiB. O limite real e a quota continuam aplicados por chunk, independentemente da estimativa. Não há leitura do vídeo inteiro em RAM.
-10. O wrapper só sinaliza EOF ao storage após receber todo stdout e confirmar encerramento do processo com código zero. Storage grava `.part`, calcula SHA-256 sobre os mesmos bytes, publica o arquivo final e `metadata.json`, e registra `uploaded` no índice existente. Timeout, desconexão, limites e falhas cancelam o subprocesso e limpam parciais; a vaga é liberada somente após aguardar o encerramento do downloader. A resposta contém `downloaded` e os metadados do upload.
+10. O wrapper só sinaliza EOF ao storage após receber todo stdout e confirmar encerramento com código zero. Storage grava `.part`, calcula SHA-256 sobre os mesmos bytes, publica arquivo e `metadata.json` e registra `uploaded`. Timeout, cancelamento explícito, limites e falhas encerram a árvore do subprocesso e limpam parciais antes de liberar a vaga. GET retorna `downloaded` com o upload. Desconectar o POST não cancela o job; o endpoint síncrono legado conserva seu cancelamento por desconexão.
 
 No fallback, o próprio storage cria o diretório UUID exclusivo da operação. yt-dlp baixa cada faixa por stdout; Node grava `track-video.part` e `track-audio.part` com `wx`. FFmpeg lê somente esses arquivos locais (`-protocol_whitelist file`) e combina `0:v:0` e `1:a:0` com `-c copy`, sem filtro/reencode. A saída MP4 fragmentada (`frag_keyframe+empty_moov`) passa por stdout diretamente para `video.mp4.part`, sem outra cópia final intermediária. FFprobe confere dois streams H.264/AAC, tamanho e duração positiva coerente com a origem (tolerância de 2 s ou 5%). Somente depois são removidas as faixas e publicado o resultado final pelo storage existente.
 
@@ -23,9 +23,9 @@ A reserva compartilhada conta **metadata + faixas já escritas + saída final em
 
 ## Estados e persistência
 
-`pending → fetching-metadata → downloading → downloaded`, ou `failed` em caso de erro. Esses estados representam aquisição do vídeo, e não processamento. Não alteram a máquina de estados do upload (`uploaded`, `queued`, `processing`, `failed`, `completed`). `downloaded` é derivado do upload persistido, sem segunda cópia de estado no disco.
+`queued → fetching-metadata → downloading → downloaded`, ou `failed`. O legado começa em `pending`. Esses estados representam aquisição do vídeo e não alteram a máquina de estados do upload. `downloaded` é derivado do upload persistido, sem segunda cópia de estado no disco.
 
-O fallback usa `downloading-video → downloading-audio → merging → downloaded`. `merging` inclui validação antes da publicação. Não foi acrescentada fila, processamento em background ou polling na interface.
+O fallback usa `downloading-video → downloading-audio → merging → downloaded`. `merging` inclui validação antes da publicação. O web usa polling e informa bytes realmente recebidos. `DELETE /ingestions/:id` cancela o job e aguarda cleanup.
 
 Tentativas em andamento e falhas ficam somente em memória; não são retomadas após reinício. Falhas expiram pela mesma retenção e o histórico transitório é limitado a aproximadamente 100 registros. Sucessos são recuperados pelo `metadata.json` do storage comum, incluindo título, duração, thumbnail canônica e checksum. Um upload expirado também deixa de existir na consulta de ingestão.
 
@@ -36,11 +36,11 @@ Tentativas em andamento e falhas ficam somente em memória; não são retomadas 
 - A aplicação não faz requisições à URL final da mídia pelo HTTPS do Node. Somente a URL YouTube canônica entra no subprocesso, com argumentos separados e `shell: false`. O diagnóstico da mídia é validado, mas URLs assinadas e headers não são retornados nem persistidos. O helper HTTPS antigo permanece fora do fluxo ativo; não existe fallback para ele.
 - Thumbnail é reconstruída em `i.ytimg.com` a partir do ID, em vez de exibir uma URL arbitrária do downloader.
 - Metadados do subprocesso são limitados a 2 MiB e stderr a 16 KiB. Erros públicos são resumidos; diagnóstico do downloader fica no log da API.
-- Reutiliza **4 GiB por arquivo**, **16 GiB de quota**, **2 vagas**, **90 segundos** e **24 horas de retenção**, respeitando as configurações existentes. A vaga e o timeout abrangem busca de metadados e transferência. Falhas não criam entrada de upload; parciais controlados são removidos e reservas liberadas.
+- Reutiliza **4 GiB por arquivo**, **16 GiB de quota**, **2 vagas** e **24 horas de retenção**. Metadata: 120 s; download: 60 min/faixa; FFmpeg: 20 min; FFprobe: 120 s. Todos configuráveis. Falhas não criam entrada de upload; parciais controlados são removidos e reservas liberadas.
 
-O próprio yt-dlp faz as requisições internas de consulta e transferência. A validação da URL de entrada não constitui isolamento de rede do subprocesso: DNS e redirects internos agora são controlados pelo downloader, sem o pinning do helper HTTPS anterior. Em produção, complemente com restrições de saída para redes internas e mantenha o executável em diretório protegido. O cancelamento encerra o processo yt-dlp; não foi introduzido gerenciamento de árvores de processos com Windows Job Objects. Nenhuma configuração de infraestrutura foi alterada nesta etapa.
+O yt-dlp controla DNS e redirects internos, sem o pinning do helper HTTPS anterior. A validação da URL não constitui isolamento de rede. O cancelamento Windows usa `taskkill /PID <PID criado pela aplicação> /T /F`, sem shell, para encerrar launcher e descendentes. Não instala ferramentas nem altera infraestrutura; no fluxo Windows validado, cleanup aguarda o fechamento dos processos e do terminador.
 
-Sem progressivo ou par H.264/AAC compatível, a ingestão retorna 422. Não promete máxima resolução nem suporte a todos os codecs/vídeos; privados, removidos, restritos, bloqueios anti-bot ou mudanças no YouTube podem impedir ingestão. O timeout atual de 90 s inclui metadata, dois downloads, remux e validação e pode ser insuficiente para vídeos grandes. Não há transcode, transcrição, cortes ou análise automática.
+Sem progressivo ou par H.264/AAC compatível, a ingestão retorna 422. Privados, removidos, restritos, bloqueios anti-bot e mudanças do YouTube podem impedir ingestão. A ingestão conserva remux sem transcode. Depois do download, o web inicia o job separado de transcrição/portfólio/cortes. Registros históricos de validação abaixo preservam os valores usados naquela medição.
 
 FFmpeg e FFprobe locais: build BtbN Windows x64 LGPL, `n9.0.2-22-g46d8f462ee-20261006`. Pacote obtido em `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip`, com SHA-256 publicado `7fd0b9102f911857e04487259c8b99f6597936bdcc4956d9eabe96245c8919f9` conferido antes de executar. Manifesto `tools/ffmpeg/installation.json` registra release, origem, hashes dos executáveis e licença LGPL v3 (`LICENSE.txt`). Ambos são verificados por hash e chamados por spawn, argumentos separados, shell: false, sem instalação global/PATH/wrapper npm. Builds para outros sistemas operacionais exigem instalação/verificação correspondente.
 

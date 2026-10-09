@@ -1,8 +1,9 @@
 # Clipador IA
 
-Fundação de um monorepo TypeScript para aprendizado e evolução do Clipador IA.
-Esta fase contém a página inicial, upload de vídeo, API com rotas de saúde e
-informações e o bootstrap do worker.
+Monorepo TypeScript para aprendizado e evolução do Clipador IA. Upload local e
+YouTube, preparação de áudio, transcrição local com timestamps, análise textual
+determinística e primeiros MP4 verticais com legendas queimadas estão integrados.
+Veja [cortes automáticos](docs/automatic-clips.md) para fluxo, rotas e limites.
 
 ## Organização
 
@@ -10,7 +11,7 @@ informações e o bootstrap do worker.
 - `apps/api`: API Node.js com Fastify.
 - `apps/worker`: bootstrap Node.js para futuro processamento.
 - `app/`: estrutura anterior preservada; não faz parte do workspace pnpm.
-- `docs/` e `packages/`: diretórios existentes, ainda sem conteúdo.
+- `docs/`: documentação e validações; `packages/` permanece sem pacote compartilhado.
 - `package-json-backup/`, `README-backup/` e `AGENTS-backup/`: diretórios vazios
   renomeados com autorização para liberar nomes de arquivos na raiz.
 
@@ -26,7 +27,8 @@ A feature de upload não acrescenta dependências.
 
 Web utiliza Next.js 16 e React 19. A API utiliza Fastify 5. TypeScript está
 declarado em cada aplicação; `tsx` permite executar TypeScript no desenvolvimento
-da API e do worker. Não há biblioteca de UI, fila, banco, autenticação ou IA.
+da API e do worker. Não há biblioteca de UI, fila, banco ou autenticação. A
+transcrição utiliza IA local; a análise de cortes não chama IA externa.
 
 ## Comandos preparados
 
@@ -64,9 +66,9 @@ inclui `"status":"ok"`. Não há script de lint configurado nesta fase.
 
 ## Fora do escopo atual
 
-Player, FFmpeg para cortes/renderização, filas, transcrição, IA, análise de potencial, sugestões
-de edição, legendas, renderização e exportação serão tratados em etapas futuras.
-Uma avaliação futura de potencial não representa garantia de viralização.
+Postagem automática, autenticação, cobrança, filas externas, cloud, B-roll,
+thumbnails e face tracking permanecem fora do escopo. A avaliação textual de
+potencial não representa garantia de viralização.
 
 ## Upload de vídeo
 
@@ -107,7 +109,8 @@ marcador de conclusão. O caminho usa apenas UUID
 gerado no servidor e extensão permitida, nunca o nome fornecido pelo cliente.
 Nomes com separadores ou caracteres de controle são rejeitados; outros caracteres
 inseguros e nomes reservados são sanitizados nos metadados. A pasta `.data/`
-é ignorada pelo Git e não é servida publicamente. Não há processamento ativo.
+é ignorada pelo Git e não é servida publicamente. O web inicia o pipeline
+de cortes após receber a confirmação, conforme a documentação de cortes.
 O parser do Fastify entrega o stream sem montar um Buffer do vídeo. A escrita
 aguarda cada chunk, respeita backpressure e trata escritas curtas do filesystem.
 O SHA-256 é atualizado com os mesmos chunks gravados e finalizado somente após
@@ -125,8 +128,9 @@ durante o build e incorpora o mesmo valor no proxy e no bundle do navegador por
 Use o mesmo `UPLOAD_MAX_FILE_BYTES` ao iniciar a API e ao construir/iniciar o web.
 Reinicie a API e refaça o build do web após alterar esse limite. `UPLOAD_QUOTA_BYTES`
 controla o armazenamento da API e não é exposta ao navegador.
-O timeout continua sendo 90 segundos: aceitar até 4 GiB não garante concluir
-o envio nesse prazo em conexões lentas (4 GiB exige aproximadamente 45,51 MiB/s).
+O upload local tem prazo padrão de 30 minutos. Aceitar até 4 GiB não garante
+concluir o envio em qualquer conexão. Download e processamento têm prazos próprios;
+veja [vídeos longos e jobs](docs/long-videos.md).
 
 ### Consulta e limites do armazenamento provisório
 
@@ -163,7 +167,7 @@ o hash conhecido, sem reler o vídeo para recalculá-lo.
 | `UPLOAD_MAX_FILE_BYTES` | `4294967296` (4 GiB) | Limite por vídeo; API e build do web |
 | `UPLOAD_QUOTA_BYTES` | `17179869184` (16 GiB) | Limite lógico de arquivos |
 | `UPLOAD_MAX_CONCURRENT` | `2` | Quantidade máxima de uploads ativos |
-| `UPLOAD_TIMEOUT_MS` | `90000` (90 segundos) | Tempo máximo por upload admitido |
+| `UPLOAD_TIMEOUT_MS` | `1800000` (30 minutos) | Upload local e endpoint YouTube síncrono legado |
 
 Valores devem ser inteiros positivos; intervalo e timeout não podem exceder `2147483647`
 ms. Configuração inválida impede a inicialização. A API não carrega `.env`
@@ -211,8 +215,9 @@ a admissão e inclui preparação e escrita. A espera por novos chunks observa
 cancelamento sem destruir o HTTP antes de responder 408. Operações de filesystem
 já em curso terminam antes da limpeza; o deadline é cooperativo, não um mecanismo
 para interromper syscalls do sistema. Um commit completo que termina na fronteira
-do timeout pode permanecer como upload completo. O cliente e o proxy web mantêm
-o limite de 120 segundos, que pode prevalecer se configurar a API acima disso.
+do timeout pode permanecer como upload completo. O cliente e o proxy do upload
+local derivam seu prazo da configuração central, com margem de 30 e 15 segundos.
+O YouTube usado pelo web retorna um ID imediatamente e usa polling independente.
 
 Não há autenticação, análise de conteúdo/codec ou coordenação entre
 processos: use **uma instância da API por diretório**, em filesystem local com
@@ -252,7 +257,7 @@ através de `transitionUpload(id, status)`, sem endpoint de mutação público:
 
 Transições inválidas retornam erro 409. A atualização usa JSON parcial e troca
 atômica do metadado existente, antes de atualizar o índice. Status são contratos
-para a futura integração: não há jobs enviados, fila ou processamento automático.
+do storage. O pipeline atual usa status próprio, sem fila ou transporte para o worker.
 
 `consumeUpload(id, callback)` protege o arquivo da limpeza, abre um handle somente
 para leitura e chama `verifyUploadIntegrity` antes do callback. Essa função relê
@@ -273,7 +278,8 @@ não altera status automaticamente; a futura integração decide o resultado.
 Consumo não pode ocorrer duas vezes ao mesmo tempo no mesmo upload, e transições
 externas são bloqueadas enquanto ele está em uso. O pin é liberado ao retornar
 ou falhar; um arquivo expirado fica protegido apenas enquanto estiver em uso.
-O consumo é uma função interna, sem rota pública e sem consumidor real conectado.
+O consumo é uma função interna, sem rota pública; preparação, ASR e render o
+reutilizam para verificar integridade e proteger o source durante o processamento.
 
 Para conferir recuperação, envie um vídeo, guarde o ID, reinicie apenas a API
 e repita `GET /uploads/:id`. Para testar retenção curta em ambiente de teste,
@@ -333,5 +339,23 @@ O PowerShell pode exibir letras maiúsculas; a API retorna letras minúsculas.
 
 Inspeção técnica e preparação de áudio foram adicionadas como primeiro bloco
 do processamento. Veja [pipeline de vídeo](docs/video-processing.md) para
-arquitetura, contratos, quota, timeout, smoke test e a autorização necessária
-antes de instalar a engine de transcrição.
+arquitetura, contratos, quota, timeout e smoke test da preparação.
+
+Transcrição real local com faster-whisper foi integrada e validada. Veja
+[transcrição e análise](docs/transcription.md) para rotas de início/status/resultado,
+persistência, word timestamps, recuperação, métricas reais e limitações; e
+[engine local](tools/transcription/README.md) para versões, origem, licenças e setup.
+
+O fluxo pós-transcrição, scoring explicável, seleção, MP4 verticais, legendas ASS,
+outputs persistentes e cards do web estão em [cortes automáticos](docs/automatic-clips.md).
+
+O fluxo atual do web foi ampliado para [ClipPortfolio e editor local](docs/clip-portfolio.md):
+múltiplas durações, famílias, emoção lexical/energia medida, seleção variada,
+EditPlans, captions dinâmicas, zoom e pacing conservador. O fluxo anterior continua
+disponível. Resultados reais por clip e limitações estão na
+[validação do portfólio](docs/portfolio-validation-2026-10-08.md).
+
+O suporte a vídeos de até uma hora, prazos independentes, jobs, polling, progresso
+real e cancelamento de processos estão em [vídeos longos](docs/long-videos.md), com
+[diagnóstico](docs/long-video-diagnosis-2026-10-08.md) e
+[resultados de validação](docs/long-video-validation-2026-10-09.md).

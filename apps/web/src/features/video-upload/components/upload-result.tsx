@@ -4,7 +4,7 @@ import styles from "./upload-result.module.css";
 
 export function UploadResult({ result }: { result: UploadSuccess }) {
   return (
-    <section className={styles["card"]} aria-labelledby="upload-result-title">
+    <section className={`${styles["card"]} glass-panel`} aria-labelledby="upload-result-title">
       <span className={styles["badge"]}>✓ Concluído</span>
       <h2 id="upload-result-title">{result.file.name}</h2>
       <dl className={styles["metadata"]}>

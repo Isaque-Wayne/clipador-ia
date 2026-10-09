@@ -8,7 +8,7 @@ import styles from "./video-input.module.css";
 export function VideoInput() {
   const [mode, setMode] = useState<"file" | "youtube">("file");
   const [busy, setBusy] = useState(false);
-  return <section className={styles["panel"]} aria-labelledby="video-input-title">
+  return <section className={`${styles["panel"]} glass-surface`} aria-labelledby="video-input-title">
     <h2 id="video-input-title">Iniciar um projeto</h2>
     <p>Escolha de onde vem seu vídeo.</p>
     <div className={styles["selector"]} role="group" aria-label="Escolha como enviar o vídeo">

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 import { openProcessStream } from "./stream-process.js";
 import type { ProcessStreamOptions } from "./stream-process.js";
+import { createStageDeadline } from "../../pipeline/services/stage-deadline.js";
 
 export async function mediaTool(name: "ffmpeg" | "ffprobe") {
   const directory = fileURLToPath(new URL("../../../../../../tools/ffmpeg/", import.meta.url));
@@ -24,8 +25,13 @@ export async function mediaTool(name: "ffmpeg" | "ffprobe") {
   } catch { throw new UploadValidationError(`${name} local ausente ou com integridade inválida.`, 503); }
 }
 export async function runMediaTool(name: "ffmpeg" | "ffprobe", args: string[], signal: AbortSignal, options: ProcessStreamOptions = {}) {
-  const executable = await mediaTool(name);
-  return openProcessStream(executable, args, signal, { ...options,
-    mapFailure: options.mapFailure ?? (() => new UploadValidationError(name === "ffmpeg" ? "FFmpeg falhou ao combinar as faixas sem reencode."
-      : "FFprobe não conseguiu validar o resultado do merge.", 502)) });
+  const deadline = createStageDeadline(name, signal);
+  try {
+    const executable = await mediaTool(name);
+    deadline.check();
+    const opened = await openProcessStream(executable, args, deadline.signal, { ...options,
+      mapFailure: options.mapFailure ?? (() => new UploadValidationError(name === "ffmpeg" ? "FFmpeg falhou ao combinar as faixas sem reencode."
+        : "FFprobe não conseguiu validar o resultado do merge.", 502)) });
+    return { ...opened, dispose: async () => { try { await opened.dispose?.(); } finally { deadline.dispose(); } } };
+  } catch (error) { deadline.dispose(); if (deadline.signal.aborted) throw deadline.signal.reason; throw error; }
 }

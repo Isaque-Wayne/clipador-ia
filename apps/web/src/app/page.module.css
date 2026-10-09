@@ -1,41 +1,21 @@
-.page {
-  color-scheme: dark;
-  width: 100%;
-  min-height: 100svh;
-  margin: 0;
-  padding: 0 2rem;
-  border: 0;
-  border-radius: 0;
-  color: #f0eff5;
-  background: radial-gradient(ellipse at 75% 35%, #252232 0%, transparent 55%), #101114;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.content { width: min(100%, 76rem); min-height: 100svh; margin: auto; display: flex; flex-direction: column; }
-.header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 2.5rem 0; }
-.brand { display: flex; align-items: center; gap: .5rem; color: #f0eff5; text-decoration: none; font-size: 1.1rem; font-weight: 650; letter-spacing: -.03em; }
-.brand > span:last-child { color: #c4b5fd; }
-.mark { display: grid; place-items: center; width: 2rem; height: 2rem; margin-right: .3rem; border-radius: .65rem; background: #c4b5fd; color: #211a33; font-size: 1.2rem; }
-.edition { font-size: .75rem; color: #9795a5; }
-.hero { flex: 1; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 4rem; padding: 4rem 0 6rem; }
-.copy { max-width: 32rem; }
-.eyebrow { margin: 0 0 1.5rem; color: #b9aadf; font-size: .7rem; font-weight: 600; letter-spacing: .16em; }
-.copy h1 { margin: 0 0 1.75rem; font-size: clamp(2.75rem, 4.6vw, 4.25rem); font-weight: 600; line-height: 1.08; letter-spacing: -.055em; }
-.copy h1 span { color: #b9b3cd; }
-.lead { margin: 0 0 1.25rem; font-size: 1.15rem; line-height: 1.6; max-width: 28rem; color: #dad7e3; }
-.description { margin: 0 0 2rem; font-size: .95rem; color: #a09baa; max-width: 26rem; }
-.start { display: inline-flex; align-items: center; justify-content: space-between; gap: 2.5rem; padding: 1rem 1.5rem; border-radius: .9rem; background: #d1c4f4; color: #221c32; box-shadow: 0 6px 24px #00000020; text-decoration: none; font-size: .95rem; font-weight: 650; }
-.start:hover { background: #e0d5fc; }
+.page { width: 100%; margin: 0; padding: 0 var(--space-5); }
+.content { width: min(100%, var(--page-width)); min-height: calc(100svh - 6rem); margin: auto; display: flex; flex-direction: column; }
+.hero { flex: 1; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: var(--space-8); padding: var(--space-8) 0; }
+.copy { max-width: 32rem; min-width: 0; }
+.eyebrow { margin: 0 0 var(--space-5); color: var(--accent); font-size: .75rem; font-weight: 600; letter-spacing: .14em; }
+.copy h1 { margin: 0 0 var(--space-5); font-size: clamp(2.75rem, 4.6vw, 4.25rem); font-weight: 600; line-height: 1.08; letter-spacing: -.055em; }
+.copy h1 span { color: var(--text-secondary); }
+.lead { margin: 0 0 var(--space-4); font-size: 1.15rem; line-height: 1.6; max-width: 28rem; color: var(--text-primary); }
+.description { margin: 0 0 var(--space-6); font-size: .95rem; color: var(--text-secondary); max-width: 26rem; }
+.start { justify-content: space-between; gap: var(--space-7); padding: var(--space-4) var(--space-5); font-size: .95rem; }
 .start span { font-size: 1.2rem; }
-.page a:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 5px; }
-.hint { color: #9893a5; font-size: .75rem; margin: 1rem 0 0; }
-.footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1.5rem 0; border-top: 1px solid #ffffff0d; color: #9792a4; font-size: .7rem; }
-@media (max-width: 1000px) { .hero { gap: 2rem; } }
+.hint { color: var(--text-secondary); font-size: .75rem; margin: var(--space-4) 0 0; }
+.footer { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) 0; border-top: 1px solid var(--glass-border); color: var(--text-secondary); font-size: .75rem; }
+@media (max-width: 1000px) { .hero { gap: var(--space-6); } }
 @media (max-width: 760px) {
-  .page { padding: 0 1.5rem; }
-  .header { padding: 1.5rem 0; }
-  .edition { display: none; }
-  .hero { grid-template-columns: 1fr; gap: 3rem; padding: 2.5rem 0 3rem; }
+  .hero { grid-template-columns: 1fr; gap: var(--space-7); padding: var(--space-7) 0; }
   .copy { max-width: 35rem; }
   .copy h1 { font-size: clamp(2.5rem, 8vw, 3.75rem); }
   .footer { flex-wrap: wrap; }
 }
+@media (max-width: 400px) { .page { padding: 0 var(--space-4); } }

@@ -26,7 +26,7 @@ export async function uploadVideo(file: File): Promise<UploadSuccess> {
       method: "POST",
       headers: { "Content-Type": getVideoType(file), "X-File-Name": encodeURIComponent(file.name) },
       body: file,
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(Number(process.env["NEXT_PUBLIC_UPLOAD_TIMEOUT_MS"] ?? 1_800_000) + 30_000),
     });
   } catch {
     throw new Error("Não foi possível conectar à API ou o envio demorou demais. Confira os serviços e tente novamente.");
