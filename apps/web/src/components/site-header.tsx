@@ -10,7 +10,8 @@ export function SiteHeader() {
       </Link>
       <nav aria-label="Navegação principal" className={styles["navigation"]}>
         <Link href="/" className="button-ghost">Início</Link>
-        <Link href="/upload" className="button-secondary">Enviar vídeo <span aria-hidden="true">↗</span></Link>
+        <Link href="/upload" className="button-secondary">Novo vídeo <span aria-hidden="true">↗</span></Link>
+        <Link href="/library" className="button-ghost">Biblioteca</Link>
       </nav>
     </header>
   );

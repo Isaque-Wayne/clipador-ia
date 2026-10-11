@@ -17,7 +17,8 @@ function environmentInteger(name: string): number | undefined {
 
 export function storagePolicy(options: UploadOptions) {
   const policy = {
-    retentionMs: positiveInteger(options.retentionMs, environmentInteger("UPLOAD_RETENTION_MS") ?? 86_400_000),
+    // Saved projects use manual management; explicit caller policies remain supported.
+    retentionMs: positiveInteger(options.retentionMs, Number.MAX_SAFE_INTEGER),
     cleanupIntervalMs: positiveInteger(options.cleanupIntervalMs, environmentInteger("UPLOAD_CLEANUP_INTERVAL_MS") ?? 900_000),
     quotaBytes: positiveInteger(options.quotaBytes, resolveUploadLimits(process.env).quotaBytes),
     now: options.now ?? Date.now,

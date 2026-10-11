@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { formatBytes } from "../../library/services/library-api";
 import { useProcessing } from "../hooks/use-processing";
 import type { ProcessingStage } from "../types";
+import { PackagePreview } from "../../social-packages/package-preview";
 import styles from "./processing-panel.module.css";
 const labels: Record<ProcessingStage, string> = {
   "not-started": "Vídeo recebido", "preparing-audio": "Preparando áudio", transcribing: "Transcrevendo", transcribed: "Transcrição concluída",
@@ -20,18 +23,18 @@ export function ProcessingPanel({ uploadId, onBusyChange }: { uploadId: string; 
     <h2>{clips.length ? `Seu portfólio · ${clips.length} cortes` : "Preparando seus cortes"}</h2>
     <p role="status" aria-live="polite" aria-atomic="true">{error ? "Não foi possível concluir esta tentativa." : labels[status.stage]}
       {busy && status.selectedCount !== undefined && ` · ${status.renderedCount ?? 0} de ${status.selectedCount} cortes concluídos`}</p>
-    {!clips.length && !error && <p className={styles["hint"]}>Transcrição → momentos de várias durações → plano de edição → vídeos com legendas. O tempo depende da duração do vídeo.</p>}
+    {!clips.length && !error && <p className={styles["hint"]}>Transcrição → momentos → edição e composição → vídeo, capa e metadata. O tempo depende da duração do vídeo.</p>}
     {busy && !warning && <p className={styles["hint"]}>O vídeo continua sendo processado. Esta etapa pode levar alguns minutos.</p>}
     {busy && status.stage === "transcribing" && status.progress && <p role="status">{status.progress.segmentsProcessed} segmentos transcritos · áudio processado até {Math.floor(status.progress.processedThroughSeconds / 60)}min{Math.floor(status.progress.processedThroughSeconds % 60)}s.</p>}
     {warning && <p role="status">{warning}</p>}
     {busy && <button type="button" className="button-secondary" onClick={() => void cancel()}>Cancelar processamento</button>}
-    {error && <div role="alert" className={styles["error"]}><p>{error.message}</p><small>Código: {error.code}</small><div><button type="button" className="button-secondary" onClick={retry}>Tentar novamente</button></div></div>}
+    {error && <div role="alert" className={styles["error"]}><p>{error.message}</p><small>Código: {error.code}</small>{error.usedBytes !== undefined && <p>Usado: {formatBytes(error.usedBytes)} · Limite: {formatBytes(error.limitBytes ?? 0)} · Necessário estimado: {formatBytes(error.requiredBytes ?? 0)} · {error.projectCount} projetos com outputs</p>}<div>{["OUTPUT_QUOTA", "DISK_FULL", "UPLOAD_STORAGE_QUOTA"].includes(error.code) && <Link href="/library" className="button-secondary">Gerenciar armazenamento</Link>}<button type="button" className="button-secondary" onClick={retry}>Tentar novamente</button></div></div>}
     {clips.length > 0 && <><p className={styles["hint"]}>Potencial e emoção inferidos por sinais textuais locais. Avalie o contexto antes de publicar.</p>
       <div className={styles["filters"]}><label>Tipo <select className="glass-input" value={profile} onChange={event => setProfile(event.target.value)}><option value="all">Todos</option>{["micro", "short", "standard", "extended"].map(value => <option key={value} value={value}>{value.toUpperCase()}</option>)}</select></label>
         <label>Ordenar <select className="glass-input" value={order} onChange={event => setOrder(event.target.value)}><option value="score">Melhores</option><option value="hook">Hook</option><option value="emotion">Emoção</option><option value="educational">Educacional</option><option value="duration">Duração</option></select></label></div>
       {!visible.length && <p>Nenhum corte deste perfil neste vídeo.</p>}<div className={styles["grid"]}>
       {visible.map((clip, index) => <article className={`${styles["clip"]} glass-subtle`} key={clip.id}>
-        <video controls playsInline preload="metadata" src={clip.url} aria-label={`Preview do corte ${index + 1}`} />
+        <PackagePreview videoUrl={clip.url} title={clip.title || `Corte ${index + 1}`} packageData={clip.socialPackage}/>
         <div className={styles["body"]}><h3>{clip.title || `Corte ${index + 1}`}</h3><p className={styles["metrics"]}>{clip.duration.toFixed(1)} segundos <span>Potencial {clip.score.toFixed(1)}/100</span></p>
           <p className={styles["metrics"]}>{clip.profile?.toUpperCase()} {clip.editStyle && `· ${clip.editStyle}`} {clip.hookScore !== undefined && `· Hook ${clip.hookScore.toFixed(1)}/100`}</p>
           {!!clip.emotions?.length && <p>Sinais textuais: {clip.emotions.map(value => emotionLabels[value] ?? value).join(", ")}</p>}

@@ -30,3 +30,10 @@ test("portfólio aceita muitos clips, novos estágios e scores distintos com lim
   assert.equal(cards.length, 16); assert.equal(cards[0]!.profile, "micro"); assert.equal(cards[0]!.hookScore, 45); assert.equal(cards[0]!.emotionalStrength, .5); assert.equal(cards[0]!.educationalScore, .7); assert.equal(cards[0]!.editStyle, "DYNAMIC");
   const corrupt = structuredClone(batch); corrupt.clips[0]!.candidate.hookScore.value = Infinity; assert.throws(() => parseClipCards(corrupt, id));
 });
+test("ordem Melhores usa score final e recusa clip marcado como inelegível", () => {
+  const clip = {id:"c_0123456789abcdef",status:"completed",duration:30,candidate:{title:"Trecho",reason:"Contexto",score:{value:65}},finalQuality:{candidateId:"c_0123456789abcdef",renderEligible:true,finalScore:81}};
+  const batch={uploadId:id,batchId:id,clips:[clip]};
+  assert.equal(parseClipCards(batch,id)[0]!.score,81);
+  assert.throws(()=>parseClipCards({...batch,clips:[{...clip,finalQuality:{...clip.finalQuality,renderEligible:false}}]},id));
+  assert.throws(()=>parseClipCards({...batch,clips:[{...clip,finalQuality:{...clip.finalQuality,finalScore:NaN}}]},id));
+});

@@ -34,7 +34,7 @@ export function processingController(processing: ProcessingService, analysis: An
       if (action === "result") return { success: true, batch: await processing.result(id) };
       return { success: true, status: await processing[action](id) };
     } catch (error) {
-      if (error instanceof ProcessingError || error instanceof TranscriptionError || error instanceof UploadValidationError) return reply.code(error.statusCode).send({ success: false, code: "code" in error ? error.code : "UPLOAD_ERROR", message: error.message });
+      if (error instanceof ProcessingError || error instanceof TranscriptionError || error instanceof UploadValidationError) return reply.code(error.statusCode).send({ success: false, code: "code" in error ? error.code : "UPLOAD_ERROR", message: error.message, ...(error instanceof ProcessingError && error.details ? { details: error.details } : {}) });
       request.log.error(error); return reply.code(500).send({ success: false, code: "INTERNAL_ERROR", message: "Não foi possível acessar o processamento." });
     }
   };

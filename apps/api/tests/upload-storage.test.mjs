@@ -56,7 +56,8 @@ test("quota conta vídeo e JSON e coordena reservas de envios simultâneos", asy
   assert.deepEqual(results.map((result) => result.statusCode).sort(), [200, 507]);
   const error = results.find((result) => result.statusCode === 507).json();
   assert.equal(error.success, false);
-  assert.match(error.message, /Armazenamento temporário cheio/);
+  assert.match(error.message, /Armazenamento de vídeos cheio/);
+  assert.equal(error.code, "UPLOAD_STORAGE_QUOTA");
   assert.equal((await readdir(directory)).length, 1);
   const restarted = createServer({ directory, quotaBytes: 650 });
   t.after(() => restarted.close());

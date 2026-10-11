@@ -30,6 +30,7 @@ export function createAnalysisService(uploads: UploadService, transcription: Tra
     },
     async start(id: string, signal = new AbortController().signal) {
       if (active.has(id)) throw new ProcessingError("IN_PROGRESS", "Análise em andamento.", 409);
+      const releaseProject = uploads.holdProject(id);
       active.add(id);
       try {
         const data = await input(id), sourceHash = data.upload.checksum!.value, transcriptHash = digest(data.transcript);
@@ -45,7 +46,7 @@ export function createAnalysisService(uploads: UploadService, transcription: Tra
           await persistAnalysis(context.directory, sourceHash, transcriptHash, report, context.reserve, context.signal, options.name);
           return { reused: false, report };
         }, signal, { timeoutMs: null }));
-      } finally { active.delete(id); }
+      } finally { active.delete(id); releaseProject(); }
     },
     async status(id: string) {
       if (active.has(id)) return { uploadId: id, stage: "analyzing" };

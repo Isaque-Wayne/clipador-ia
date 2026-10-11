@@ -1,0 +1,10 @@
+import { readFile } from "node:fs/promises";
+import { resolve,join } from "node:path";
+import { PortfolioAnalysisProvider } from "../../apps/api/dist/features/portfolio/services/portfolio-provider.js";
+import { selectFinalPortfolio } from "../../apps/api/dist/features/portfolio/services/final-selection.js";
+const source=resolve(process.argv[2]??"apps/api/.data/long-video-validation/2026-10-09T00-23-21-111Z/uploads/58c33abb-00b2-4ca5-84ae-c9ba67e69a35");
+const transcript=JSON.parse(await readFile(join(source,"transcript.json"),"utf8")).transcript;
+const old=JSON.parse(await readFile(join(source,"portfolio.json"),"utf8")).report;
+const report=await new PortfolioAnalysisProvider().analyze({uploadId:"quality-validation",transcript,audio:old.portfolio.audio},new AbortController().signal);
+const result=selectFinalPortfolio(report,"maximum");
+console.log(JSON.stringify({analysis:report.portfolio.metrics,summary:result.summary,selection:result.candidates.map(candidate=>({id:candidate.id,profile:candidate.profile,start:candidate.start,end:candidate.end,title:candidate.title,hook:candidate.hookScore.value,score:candidate.score.value,final:result.audit.find(entry=>entry.candidateId===candidate.id).finalScore})),rejections:result.audit.filter(entry=>entry.decision==="quality-rejected").reduce((counts,entry)=>{for(const reason of entry.reasons)counts[reason]=(counts[reason]??0)+1;return counts;},{})},null,2));

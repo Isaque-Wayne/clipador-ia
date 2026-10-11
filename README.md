@@ -162,10 +162,10 @@ o hash conhecido, sem reler o vídeo para recalculá-lo.
 
 | Configuração no ambiente da API | Padrão | Uso |
 | --- | --- | --- |
-| `UPLOAD_RETENTION_MS` | `86400000` (24 horas) | Validade desde a criação |
-| `UPLOAD_CLEANUP_INTERVAL_MS` | `900000` (15 minutos) | Frequência da limpeza |
+| `UPLOAD_CLEANUP_INTERVAL_MS` | `900000` (15 minutos) | Frequência da varredura; projetos não expiram |
 | `UPLOAD_MAX_FILE_BYTES` | `4294967296` (4 GiB) | Limite por vídeo; API e build do web |
 | `UPLOAD_QUOTA_BYTES` | `17179869184` (16 GiB) | Limite lógico de arquivos |
+| `OUTPUT_STORAGE_QUOTA_BYTES` | `4294967296` (4 GiB) | Limite lógico independente dos cortes |
 | `UPLOAD_MAX_CONCURRENT` | `2` | Quantidade máxima de uploads ativos |
 | `UPLOAD_TIMEOUT_MS` | `1800000` (30 minutos) | Upload local e endpoint YouTube síncrono legado |
 
@@ -188,14 +188,15 @@ exatamente 4 GiB não cabem juntos com seus JSON. Uma quota customizada menor qu
 o tamanho de um vídeo mais seus metadados bloqueia esse envio com 507, sem
 ser aumentada automaticamente.
 
-A limpeza ocorre na inicialização, periodicamente e antes de novo upload.
-Uploads completos expiram pela data de criação; órfãos e parciais usam a última
-modificação do diretório e de seus arquivos. A consulta deixa de mostrar um
-upload expirado imediatamente, mesmo antes da remoção física. A limpeza usa
-somente `unlink` de arquivos conhecidos e `rmdir` de diretórios vazios, nunca
-remoção recursiva nem comandos do sistema. Valida UUID, caminho canônico e
-filhos antes de remover. Links simbólicos/junctions e subdiretórios inesperados
-interrompem a operação; não são seguidos. Conteúdo desconhecido não é apagado.
+A varredura ocorre na inicialização, periodicamente e antes de novo upload.
+**Projetos salvos não expiram automaticamente.** A Biblioteca em `/library`
+permite consultar e excluir projetos/cortes após confirmação. `UPLOAD_RETENTION_MS`
+não controla mais a API padrão; políticas explícitas de `retentionMs` permanecem
+apenas para callers internos/testes isolados. A exclusão manual valida UUID,
+caminhos canônicos e todos os filhos antes de remover arquivos regulares via
+`unlink` e diretórios vazios via `rmdir`, sem remoção recursiva. Links/junctions
+e conteúdo desconhecido bloqueiam a operação. Jobs e players ativos protegem
+o projeto. Veja [Biblioteca e armazenamento](docs/library.md).
 
 A quota conta vídeos, JSON, parciais e outros arquivos regulares existentes,
 por tamanho lógico (não por blocos físicos ou espaço livre do disco). Antes
@@ -235,7 +236,8 @@ Se o cliente já desconectou, não é possível entregar uma resposta de erro.
 Falhas HTTP com corpo ainda incompleto encerram a conexão após a resposta.
 Uma falha após promover o vídeo e antes de concluir os metadados pode deixar
 um vídeo completo órfão. Diretórios vazios, falhas na própria remoção e crashes
-abruptos ficam para a retenção; contam na quota pelos arquivos existentes.
+abruptos permanecem contabilizados pelos arquivos existentes; não são apagados
+por idade na configuração padrão.
 Falha de storage retorna 500 sem expor caminhos; falha na recuperação impede
 iniciar a API e falha na limpeza periódica é registrada no log.
 Um timeout no cliente pode ocorrer depois de a API salvar o arquivo; repetir

@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { AnalysisInput, AnalysisProvider, AnalysisReport } from "../../analysis/contracts.js";
-import { speechUnits, adjustBounds } from "../../analysis/services/speech-units.js";
+import { speechUnits } from "../../analysis/services/speech-units.js";
 import { localSignals, plain } from "../../analysis/services/local-signals.js";
 import { scoreCandidate } from "../../analysis/services/score-candidate.js";
 import { overlap } from "../../analysis/services/select-candidates.js";
 import { emotionSignals, hookScore, storyArc } from "./emotion-signals.js";
-import { chooseStyle } from "../../editing/planning/edit-plan.js";
+import { selectFinalPortfolio } from "./final-selection.js";
+import { refineSpeechWindow } from "./refine-boundaries.js";
 import { DURATION_PROFILES } from "../types.js";
 import type { DurationProfile, PortfolioCandidate, ClipPortfolio, QuantityMode } from "../types.js";
-export const PORTFOLIO_VERSION = "portfolio-local-1.0.2";
+export const PORTFOLIO_VERSION = "portfolio-local-1.1.1";
 const id = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 16);
 export function textSimilarity(a: string[], b: string[]) { const first = new Set(a), second = new Set(b); const union = new Set([...first, ...second]); return union.size ? [...first].filter(token => second.has(token)).length / union.size : 0; }
 export class PortfolioAnalysisProvider implements AnalysisProvider {
@@ -30,9 +31,9 @@ export class PortfolioAnalysisProvider implements AnalysisProvider {
           if (duration >= range.min * .85) endings.push({ last, distance: Math.abs(duration - range.target) });
         }
         for (const ending of endings.sort((a, b) => a.distance - b.distance).slice(0, 2)) {
-          const selected = units.slice(first, ending.last + 1), bounds = adjustBounds(units, first, ending.last, input.transcript.duration);
+          const { selected, bounds } = refineSpeechWindow(units, first, ending.last, input.transcript.duration, range.max);
           const duration = Math.round((bounds.end - bounds.start) * 1000) / 1000;
-          if (duration <= 0 || duration > 180) continue;
+          if (duration < range.min || duration > range.max) continue;
           const signals = localSignals(selected, duration), score = scoreCandidate(selected, duration, range); score.method = PORTFOLIO_VERSION;
           const hook = hookScore(selected), emotion = emotionSignals(selected, duration, audio), arc = storyArc(selected);
           const clarity = score.dimensions.find(item => item.name === "standaloneClarity")?.value ?? 0;
@@ -54,7 +55,9 @@ export class PortfolioAnalysisProvider implements AnalysisProvider {
       }
     }
     const kept: PortfolioCandidate[] = [];
-    for (const candidate of candidates.sort((a, b) => b.score.value - a.score.value || b.hookScore.value - a.hookScore.value || a.start - b.start || a.id.localeCompare(b.id))) {
+    for (const candidate of candidates.sort((a, b) => b.score.value - a.score.value || b.hookScore.value - a.hookScore.value || a.start - b.start
+      || Math.abs(a.duration - DURATION_PROFILES[a.profile].target) - Math.abs(b.duration - DURATION_PROFILES[b.profile].target)
+      || a.end - b.end || a.profile.localeCompare(b.profile) || a.id.localeCompare(b.id))) {
       const duplicate = kept.find(previous => previous.profile === candidate.profile && overlap(previous, candidate) >= .82);
       if (duplicate) {
         const entry = audit.find(item => item.candidateId === candidate.id && item.decision === "approved");
@@ -76,33 +79,5 @@ export class PortfolioAnalysisProvider implements AnalysisProvider {
   }
 }
 export function selectPortfolio(report: AnalysisReport, quantity: QuantityMode = "auto"): PortfolioCandidate[] {
-  const portfolio = report.portfolio; if (!portfolio) throw new Error("Report sem portfólio.");
-  const threshold = { auto: 46, few: 55, normal: 46, many: 43, maximum: 40 }[quantity];
-  const eligible = report.candidates.filter((item): item is PortfolioCandidate => item.profile !== undefined && item.score.value >= threshold);
-  if (quantity === "maximum") return eligible;
-  const budget = Math.max(1, Math.ceil(portfolio.sourceDuration / ({ auto: 20, few: 90, normal: 20, many: 10 }[quantity])));
-  const selected: PortfolioCandidate[] = [];
-  const seenProfiles = new Set<string>(), seenEmotions = new Set<string>(), seenStyles = new Set<string>();
-  const states = eligible.map(candidate => ({ candidate, style: chooseStyle(candidate, "AUTO"), temporal: 0, topic: 0, disabled: false }));
-  while (selected.length < budget) {
-    let best: (typeof states)[number] | undefined, bestValue = -Infinity;
-    for (const state of states) {
-      if (state.disabled) continue;
-      const candidate = state.candidate;
-      const value = candidate.score.value + candidate.hookScore.value * .06 + (seenProfiles.has(candidate.profile) ? 0 : 12)
-        + (candidate.emotion.semantic.labels.some(label => !seenEmotions.has(label.name)) ? 3 : 0) + (seenStyles.has(state.style) ? 0 : 2) - state.temporal * 6 - state.topic * 8;
-      if (!best || value > bestValue || value === bestValue && (candidate.start < best.candidate.start || candidate.start === best.candidate.start && candidate.id < best.candidate.id)) { best = state; bestValue = value; }
-    }
-    if (!best) break;
-    selected.push(best.candidate); best.disabled = true;
-    seenProfiles.add(best.candidate.profile); seenStyles.add(best.style); best.candidate.emotion.semantic.labels.forEach(label => seenEmotions.add(label.name));
-    // Accumulate similarity once per selection, rather than recomputing it inside sort comparisons.
-    for (const state of states) {
-      if (state.disabled) continue;
-      const temporal = overlap(best.candidate, state.candidate);
-      state.temporal = Math.max(state.temporal, temporal); state.topic = Math.max(state.topic, textSimilarity(best.candidate.topicTokens, state.candidate.topicTokens));
-      if (best.candidate.profile === state.candidate.profile && temporal > .5) state.disabled = true;
-    }
-  }
-  return selected;
+  return selectFinalPortfolio(report, quantity).candidates;
 }

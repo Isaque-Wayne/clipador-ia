@@ -1,6 +1,7 @@
 import { prepareStorageRoot, uploadPath } from "../../uploads/services/storage-paths.js";
 import { DEFAULT_UPLOAD_DIRECTORY } from "../../uploads/services/temporary-video-storage.js";
 import { UploadValidationError } from "../../uploads/utils/validate-video.js";
+import { UploadStorageQuotaError } from "../../uploads/services/storage-quota.js";
 import type { UploadService } from "../../uploads/services/receive-video.js";
 import type { TranscriptionOptions, TranscriptionStatus } from "../types/status.js";
 import { createFasterWhisperEngine } from "./faster-whisper-engine.js";
@@ -65,7 +66,7 @@ export function createTranscriptionService(uploads: UploadService, directory = D
     } catch (error) {
       const known = job.abort.signal.aborted ? job.abort.signal.reason : error;
       job.status = { ...job.status, stage: "failed", finishedAt: new Date().toISOString(), error: {
-        code: known instanceof TranscriptionError ? known.code : known instanceof UploadValidationError ? (known.statusCode === 408 ? "TIMEOUT" : "PREPARATION_FAILED") : "PROCESSING_FAILED",
+        code: known instanceof TranscriptionError || known instanceof UploadStorageQuotaError ? known.code : known instanceof UploadValidationError ? (known.statusCode === 408 ? "TIMEOUT" : "PREPARATION_FAILED") : "PROCESSING_FAILED",
         message: known instanceof TranscriptionError || known instanceof UploadValidationError ? known.message : "Não foi possível concluir a transcrição.",
         ...(known instanceof PipelineTimeoutError ? { stage: known.stage, timeoutMs: known.timeoutMs, elapsedMs: known.elapsedMs } : { stage: job.status.stage }),
       } };
@@ -78,7 +79,9 @@ export function createTranscriptionService(uploads: UploadService, directory = D
       if (existing && !["completed", "failed"].includes(existing.status.stage))
         throw new TranscriptionError("IN_PROGRESS", "Transcrição já em andamento.", 409);
       if (active || closing) throw new TranscriptionError("BUSY", "A engine está ocupada. Tente novamente após a transcrição atual.", 429);
+      const releaseProject = uploads.holdProject(id);
       active = true;
+      let transferred = false;
       try {
         const cached = await stored(id);
         if (cached) {
@@ -95,8 +98,11 @@ export function createTranscriptionService(uploads: UploadService, directory = D
         if (options.resourceGate) job.release = options.resourceGate.acquire();
         jobs.set(id, job);
         job.done = execute(id, job);
+        transferred = true;
+        void job.done.finally(releaseProject);
         return { reused: false, status: { ...job.status } };
       } catch (error) { active = false; throw error; }
+      finally { if (!transferred) releaseProject(); }
     },
     async status(id: string) {
       metadata(id);

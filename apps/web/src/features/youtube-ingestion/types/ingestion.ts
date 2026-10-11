@@ -13,4 +13,4 @@ export interface IngestionProgress {
   warning?: string;
 }
 export type IngestionState = { status: "idle" } | { status: "loading"; progress?: IngestionProgress }
-  | { status: "success"; result: IngestionResult } | { status: "error"; message: string; id?: string };
+  | { status: "success"; result: IngestionResult } | { status: "error"; message: string; id?: string; retryUrl?: string };

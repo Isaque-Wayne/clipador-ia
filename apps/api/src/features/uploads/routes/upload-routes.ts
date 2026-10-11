@@ -3,6 +3,7 @@ import { createUploadVideoController } from "../controllers/upload-video.js";
 import { createGetUploadController } from "../controllers/get-upload.js";
 import type { UploadService } from "../services/receive-video.js";
 import { MAX_VIDEO_BYTES, VIDEO_EXTENSIONS, UploadValidationError, UPLOAD_SIZE_ERROR } from "../utils/validate-video.js";
+import { UploadStorageQuotaError } from "../services/storage-quota.js";
 
 export async function registerUploadRoutes(server: FastifyInstance, service: UploadService): Promise<void> {
   const recovered = await service.initialize();
@@ -25,7 +26,7 @@ export async function registerUploadRoutes(server: FastifyInstance, service: Upl
   server.setErrorHandler((error, request, reply) => {
     if (!request.raw.complete) reply.header("Connection", "close");
     if (error instanceof UploadValidationError) {
-      return reply.code(error.statusCode).send({ success: false, message: error.message });
+      return reply.code(error.statusCode).send({ success: false, message: error.message, ...(error instanceof UploadStorageQuotaError ? { code: error.code, details: error.details } : {}) });
     }
     const code = error instanceof Error && "code" in error ? error.code : undefined;
     const statusCode = error instanceof Error && "statusCode" in error

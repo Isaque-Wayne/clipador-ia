@@ -1,7 +1,8 @@
 import { RENDER_PROFILES } from "../types.js";
 import type { RenderPlan } from "./render-plan.js";
 import { validateEditPlan } from "../planning/validate-edit-plan.js";
-export const PLANNED_RENDER_VERSION = "editplan-ffmpeg-1.0.1";
+import { compositionFilters } from "../../visual-composition/filter-graph.js";
+export const PLANNED_RENDER_VERSION = "vertical-quality-ffmpeg-1.1.1";
 const fixed = (value: number) => String(Math.round(value * 1000000) / 1000000);
 export function clipByteBudget(duration: number) { return Math.min(128 * 1024 * 1024, Math.ceil(duration * 6_192_000 / 8 * 1.15 + 2 * 1024 * 1024)); }
 export function planFilterGraph(render: RenderPlan, musicName?: string): string {
@@ -21,7 +22,10 @@ export function planFilterGraph(render: RenderPlan, musicName?: string): string 
     ? `scale=${profile.width}:${profile.height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${profile.width}:${profile.height},setsar=1`
     : `scale=${profile.width}:${profile.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=${profile.width}:${profile.height}:(ow-iw)/2:(oh-ih)/2:color=0x10121c,setsar=1`;
   const zoom = plan.zoomEvents.length ? `,scale=w='ceil(${profile.width}*(1+${plan.zoomEvents.map(event => `if(between(t,${fixed(event.start)},${fixed(event.end)}),${fixed(event.intensity)}*min(1,min((t-${fixed(event.start)})/0.18,(${fixed(event.end)}-t)/0.18)),0)`).join("+")})/2)*2':h=-2:eval=frame,crop=${profile.width}:${profile.height}:(iw-${profile.width})/2:(ih-${profile.height})/2` : "";
-  filters.push(`[video]${frame}${zoom},ass=filename=${plan.clipId}.ass[vout]`);
+  if (render.visual) {
+    filters.push(...compositionFilters("[video]", "[composed]", render.visual, profile.width, profile.height));
+    filters.push(`[composed]null${zoom},ass=filename=${plan.clipId}.ass[vout]`);
+  } else filters.push(`[video]${frame}${zoom},ass=filename=${plan.clipId}.ass[vout]`);
   if (musicName && render.assets.music && plan.music.requested) {
     const music = plan.music, duck = music.ducking;
     filters.push("[audio]asplit=2[voice][side]");

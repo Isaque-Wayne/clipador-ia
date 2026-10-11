@@ -76,7 +76,7 @@ test("fixture real: pipeline, MP4 com áudio, ASS queimado, GET/ranges, reuso e 
     const download = await server.inject(`${url}?download=1`); assert.match(download.headers["content-disposition"], /attachment/);
     assert.equal((await server.inject({ method: "POST", url: `/uploads/${id}/process` })).json().reused, true);
     assert.equal(engineCalls, 1); assert.deepEqual(await readdir(join(outputs, ".work")), []);
-    assert.deepEqual((await readdir(join(directory, id))).sort(), ["analysis.json", "metadata.json", "transcript.json", "video.mp4"]);
+    assert.deepEqual((await readdir(join(directory, id))).sort(), ["analysis.json", "metadata.json", "processing-legacy.json", "transcript.json", "video.mp4"]);
   } finally { await server.close(); }
   const restored = createServer({ directory }, {}, { engine: { async transcribe() { assert.fail("No reprocessing"); } } }, options); restored.log.level = "silent";
   try {
@@ -93,7 +93,8 @@ test("fixture real: pipeline, MP4 com áudio, ASS queimado, GET/ranges, reuso e 
     assert.equal(status.stage, "failed", JSON.stringify(status)); assert.equal(status.error.code, "RENDER_TIMEOUT");
     assert.deepEqual(await readdir(join(timeoutOutputs, ".work")), []);
     assert.equal((await timed.inject(`/uploads/${id}`)).statusCode, 200);
-    assert.deepEqual(await readdir(join(outputs, id, batch.batchId)), [batch.clips[0].file, "manifest.json"]);
+    const saved = batch.clips[0];
+    assert.deepEqual((await readdir(join(outputs, id, batch.batchId))).sort(), [saved.file, saved.socialPackage.thumbnail.file, saved.socialPackage.sourceFrame.file, saved.socialPackage.metadata.file, "manifest.json"].sort());
   } finally { await timed.close(); }
   const cancelledOutputs = join(root, "cancelled-clips");
   const cancelled = createServer({ directory }, {}, {}, { directory: cancelledOutputs }); cancelled.log.level = "silent";

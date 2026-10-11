@@ -10,6 +10,7 @@ import { emotionSignals, hookScore, storyArc } from "../dist/features/portfolio/
 import { parseAudioSignals } from "../dist/features/portfolio/services/audio-signals.js";
 import { parseReport, parseCandidate, persistAnalysis, readAnalysis } from "../dist/features/analysis/services/analysis-persistence.js";
 import { overlap } from "../dist/features/analysis/services/select-candidates.js";
+import { evaluateFinalCandidate } from "../dist/features/portfolio/services/final-quality.js";
 
 const signal = new AbortController().signal;
 function fixture(duration = 240) {
@@ -27,6 +28,10 @@ test("portfólio cobre durações, preserva famílias entre perfis e audita cada
   assert.deepEqual(parseReport(report), report);
   const other = await provider.analyze(input, signal);
   assert.deepEqual(other.candidates, report.candidates);
+  const alternate = await provider.analyze({ ...input, uploadId: "different-upload" }, signal);
+  const content = candidate => ({start:candidate.start,end:candidate.end,profile:candidate.profile,score:candidate.score.value});
+  assert.deepEqual(alternate.candidates.map(content), report.candidates.map(content), "Empates de conteúdo não dependem do UUID");
+  assert.deepEqual(selectPortfolio(alternate,"maximum").map(content),selectPortfolio(report,"maximum").map(content));
   assert.ok(report.candidates.length > 3);
   for (const profile of ["micro", "short", "standard", "extended"]) assert.ok(report.portfolio[profile].length > 0, profile);
   assert.ok(report.portfolio.families.some(family => family.profiles.length > 1));
@@ -46,9 +51,9 @@ test("quantidade e diversidade respeitam qualidade; máximo mantém variações 
   const report = await provider.analyze({ uploadId: "fixture", transcript: fixture() }, signal);
   const auto = selectPortfolio(report), few = selectPortfolio(report, "few"), maximum = selectPortfolio(report, "maximum");
   assert.ok(auto.length > 3); assert.ok(few.length <= auto.length);
-  assert.ok(new Set(auto.map(candidate => candidate.profile)).size >= 3);
+  assert.ok(auto.every(candidate => evaluateFinalCandidate(candidate).renderEligible), "Não preencher categorias com candidatos fracos ou duplicados");
   assert.ok(auto.every(candidate => candidate.score.value >= 46));
-  assert.equal(maximum.length, report.candidates.length);
+  assert.ok(maximum.length <= 20); assert.ok(maximum.length <= report.candidates.length);
   assert.equal(textSimilarity(["one", "two"], ["two", "three"]), 1 / 3);
   const poor = structuredClone(report); poor.candidates.forEach(candidate => { candidate.score.value = 39; });
   assert.deepEqual(selectPortfolio(poor, "maximum"), []);

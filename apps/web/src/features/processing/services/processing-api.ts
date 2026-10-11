@@ -1,10 +1,11 @@
 import type { ClipCard, ProcessingStatus, DurationProfile } from "../types";
+import { parsePackagePreview } from "../../social-packages/parse-package";
 const PROCESSING_STAGES = ["not-started", "preparing-audio", "transcribing", "transcribed", "analyzing", "selecting-clips", "planning-edits", "resolving-assets", "rendering-subtitles", "rendering-clips", "completed", "failed"] as const satisfies readonly ProcessingStatus["stage"][];
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const uuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
 export class ProcessingApiError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) { super(message); this.code = code; }
+  constructor(code: string, message: string, readonly details?: Omit<NonNullable<ProcessingStatus["error"]>, "code" | "message">) { super(message); this.code = code; }
 }
 export async function processingRequest(id: string, path: string, method: "GET" | "POST" | "DELETE", signal: AbortSignal) {
   if (!uuid(id)) throw new ProcessingApiError("INVALID_ID", "Identificação do vídeo inválida.");
@@ -36,6 +37,10 @@ export function parseProcessingStatus(value: unknown, uploadId: string): Process
     const error = value["error"];
     if (!record(error) || typeof error["code"] !== "string" || typeof error["message"] !== "string") throw new ProcessingApiError("INVALID_RESPONSE", "Erro de processamento inválido.");
     status.error = { code: error["code"], message: error["message"] };
+    for (const key of ["usedBytes", "limitBytes", "requiredBytes", "projectCount"] as const) if (error[key] !== undefined) {
+      if (!Number.isSafeInteger(error[key]) || Number(error[key]) < 0) throw new ProcessingApiError("INVALID_RESPONSE", "Detalhes de quota inválidos.");
+      status.error[key] = Number(error[key]);
+    }
   }
   if (value["progress"] !== undefined) {
     const progress = value["progress"];
@@ -53,6 +58,11 @@ export function parseClipCards(value: unknown, uploadId: string): ClipCard[] {
     const candidate = clip["candidate"], score = candidate["score"];
     if (typeof candidate["title"] !== "string" || typeof candidate["reason"] !== "string" || !record(score) || typeof score["value"] !== "number" || !Number.isFinite(score["value"]) || score["value"] < 0 || score["value"] > 100) throw new ProcessingApiError("INVALID_RESPONSE", "Dados do corte inválidos.");
     const card: ClipCard = { id: clip["id"], title: candidate["title"], duration: clip["duration"], score: score["value"], reason: candidate["reason"], url: `/api/uploads/${uploadId}/clips/${batchId}/${clip["id"]}/file` };
+    if (clip["finalQuality"] !== undefined) {
+      const quality = clip["finalQuality"];
+      if (!record(quality) || quality["candidateId"] !== clip["id"] || quality["renderEligible"] !== true || typeof quality["finalScore"] !== "number" || !Number.isFinite(quality["finalScore"]) || quality["finalScore"] < 0 || quality["finalScore"] > 100) throw new ProcessingApiError("INVALID_RESPONSE", "Qualidade final do corte inválida.");
+      card.score = quality["finalScore"];
+    }
     if (candidate["profile"] !== undefined) {
       if (!["micro", "short", "standard", "extended"].includes(String(candidate["profile"])) || typeof candidate["familyId"] !== "string" || !/^f_[a-f0-9]{16}$/.test(candidate["familyId"]) || !record(candidate["hookScore"]) || typeof candidate["hookScore"]["value"] !== "number" || !Number.isFinite(candidate["hookScore"]["value"]) || candidate["hookScore"]["value"] < 0 || candidate["hookScore"]["value"] > 100
         || !record(candidate["emotion"]) || !record(candidate["emotion"]["semantic"]) || !Array.isArray(candidate["emotion"]["semantic"]["labels"])) throw new ProcessingApiError("INVALID_RESPONSE", "Perfil do corte inválido.");
@@ -66,6 +76,7 @@ export function parseClipCards(value: unknown, uploadId: string): ClipCard[] {
       }
     }
     if (record(clip["editPlan"]) && typeof clip["editPlan"]["style"] === "string") card.editStyle = clip["editPlan"]["style"];
+    if (clip["socialPackage"] !== undefined) card.socialPackage = parsePackagePreview(clip["socialPackage"], `/api/uploads/${uploadId}/clips/${batchId}/${clip["id"]}`);
     return card;
   });
 }

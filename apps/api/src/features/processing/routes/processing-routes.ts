@@ -14,6 +14,9 @@ import { readAudioSignals } from "../../portfolio/services/audio-signals.js";
 import { startPortfolio } from "../../portfolio/controllers/start-portfolio.js";
 import { PLANNED_RENDER_VERSION } from "../../editing/rendering/ffmpeg-plan.js";
 import { createResourceGate } from "../services/resource-gate.js";
+import { createLibraryService } from "../../library/services/library-service.js";
+import { registerLibraryRoutes } from "../../library/routes/library-routes.js";
+import { servePackageArtifact } from "../../social-packages/serve-artifact.js";
 
 export function registerProcessingRoutes(server: FastifyInstance, uploads: UploadService, transcription: TranscriptionService, gate: ResourceGate, uploadDirectory: string | undefined, options: ProcessingOptions) {
   const analysis = createAnalysisService(uploads, transcription, uploadDirectory, options.analysisProvider);
@@ -28,6 +31,7 @@ export function registerProcessingRoutes(server: FastifyInstance, uploads: Uploa
     portfolio: true, admission, renderVersion: PLANNED_RENDER_VERSION, select: selectPortfolio, ...(options.musicDirectory ? { musicDirectory: options.musicDirectory } : {}),
   });
   server.addHook("onReady", () => storage.initialize());
+  registerLibraryRoutes(server, createLibraryService(uploads, storage, [service, portfolioService]), uploads);
   server.addHook("onClose", () => service.close());
   server.addHook("onClose", () => portfolioService.close());
   server.post("/uploads/:id/portfolio", processingController(portfolioService, portfolioAnalysis, "analyze"));
@@ -47,5 +51,8 @@ export function registerProcessingRoutes(server: FastifyInstance, uploads: Uploa
   server.get("/uploads/:id/analysis/candidates/:candidateId", processingController(service, analysis, "candidate"));
   server.post("/uploads/:id/analysis/select", processingController(service, analysis, "select"));
   server.get("/uploads/:id/clips", processingController(service, analysis, "result"));
-  server.get("/uploads/:id/clips/:batchId/:candidateId/file", serveClip(storage));
+  server.get("/uploads/:id/clips/:batchId/:candidateId/file", serveClip(storage, uploads));
+  server.get("/uploads/:id/clips/:batchId/:candidateId/thumbnail", servePackageArtifact(storage, uploads, "thumbnail"));
+  server.get("/uploads/:id/clips/:batchId/:candidateId/metadata", servePackageArtifact(storage, uploads, "metadata"));
+  server.get("/uploads/:id/clips/:batchId/:candidateId/source-frame", servePackageArtifact(storage, uploads, "sourceFrame"));
 }

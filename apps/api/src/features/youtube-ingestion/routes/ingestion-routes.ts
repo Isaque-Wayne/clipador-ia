@@ -6,6 +6,7 @@ import { createYouTubeDownloader } from "../services/youtube-downloader.js";
 import { createYouTubeIngestion } from "../services/ingest-youtube.js";
 import { createIngestController, createIngestionQueryController } from "../controllers/ingestion-controller.js";
 import { PipelineTimeoutError } from "../../pipeline/services/stage-deadline.js";
+import { YouTubeDownloaderError } from "../utils/downloader-error.js";
 
 export async function registerYouTubeRoutes(server: FastifyInstance, uploads: UploadService, options: YouTubeIngestionOptions) {
   await server.register(async (scoped) => {
@@ -13,7 +14,7 @@ export async function registerYouTubeRoutes(server: FastifyInstance, uploads: Up
       (message) => scoped.log.warn({ downloader: message.replace(/https?:\/\/[^\s]+/g, "[URL omitida]") }, "Diagnóstico do downloader YouTube.")));
     scoped.setErrorHandler((error, _request, reply) => {
       if (error instanceof UploadValidationError) return reply.code(error.statusCode).send({ success: false,
-        code: error instanceof PipelineTimeoutError ? error.code : "INGESTION_ERROR", message: error.message });
+        code: error instanceof PipelineTimeoutError || error instanceof YouTubeDownloaderError ? error.code : "INGESTION_ERROR", message: error.message });
       const status = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
         ? error.statusCode : 500;
       if (status >= 500) scoped.log.error(error);

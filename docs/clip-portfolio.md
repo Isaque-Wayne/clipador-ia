@@ -37,7 +37,7 @@ concorrência indisponível responde BUSY/429. Cancelamento/shutdown aguardam cl
 
 ## Descoberta, score, famílias e seleção
 
-Versão: `portfolio-local-1.0.2`. Reutiliza unidades de fala e bordas da análise
+Versão: `portfolio-local-1.1.1`. Reutiliza unidades de fala e bordas da análise
 validada: pontuação conclusiva/pausas, sem divisão periódica ou reorganização de
 fala. Amostra até 160 aberturas distribuídas pelo vídeo; considera dois finais
 próximos do alvo por perfil, até 1.280 candidatos. Esse teto limita trabalho e
@@ -46,12 +46,14 @@ persistência; não limita a três outputs.
 | Perfil | Orientação | Alvo | Objetivo |
 | --- | --- | ---: | --- |
 | MICRO | 8–20 s | 14 s | Hook/punchline |
-| SHORT | 20–45 s | 34 s | Explicação rápida |
-| STANDARD | 45–75 s | 60 s | Desenvolvimento |
+| SHORT | 20–40 s | 32 s | Explicação rápida |
+| STANDARD | 40–75 s | 60 s | Desenvolvimento |
 | EXTENDED | 75–180 s | 105 s | História/raciocínio |
 
-Pode aceitar uma frase completa até 15% fora da orientação; nunca ultrapassa
-180 s. Fala sem borda adequada não é cortada para cumprir duração. Os pesos do
+As bordas finais respeitam a faixa do perfil e nunca ultrapassam 180 s.
+Remove apenas fillers isolados com segurança nos primeiros três segundos;
+permite até seis segundos adicionais para uma frase incompleta, dentro da faixa.
+Fala sem borda adequada não é cortada para cumprir duração. Os pesos do
 score original são preservados; apenas penalidades de duração recebem a faixa
 do perfil. PotentialScore continua sendo heurística local explicável, sem
 promessa de viralização. HookScore separado observa palavras dos primeiros
@@ -66,20 +68,33 @@ Dedup >=82% somente dentro do mesmo perfil. FamilyId deriva da abertura, mantend
 versões com objetivos/durações diferentes. Não se infere identidade semântica
 entre aberturas diferentes; isso é uma limitação da família local.
 
-| Quantidade | Piso | Orçamento adaptativo |
-| --- | ---: | --- |
-| Auto / Normal | 46 | ceil(duração do source / 20) |
-| Poucos | 55 | ceil(duração / 90) |
-| Muitos | 43 | ceil(duração / 10) |
-| Máximo aproveitamento | 40 | Todos os candidatos aprovados e deduplicados |
+| Quantidade | Orçamento final, sempre condicionado à qualidade |
+| --- | --- |
+| Auto | min(MAX_FINAL_CLIPS, ceil(duração / 45)) |
+| Poucos | min(MAX_FINAL_CLIPS, 6) |
+| Normal | min(MAX_FINAL_CLIPS, 12) |
+| Muitos / Máximo | MAX_FINAL_CLIPS |
 
-Orçamentos são máximos, não quotas. A seleção pode retornar menos ou nenhum.
-Nos modos adaptativos, sobreposição >50% dentro do mesmo perfil impede repetição.
-Utility = score + hook×0,06 + perfil ainda não coberto×12 + emoção nova×3 + estilo
-AUTO novo×2 − maior sobreposição×6 − maior similaridade de tokens×8. Presets são
-inferidos pelo mesmo `chooseStyle` usado no planejamento. Similaridade é Jaccard
-de tokens, sem embeddings. Estados incrementais evitam recalcular comparações
-dentro de ordenações; Máximo retorna o pool aprovado, sem esse custo quadrático.
+`MAX_FINAL_CLIPS` é 20 por padrão, configurável entre 1 e 100. Nenhum modo
+reduz o piso: score original ≥50, final ≥58, hook ≥35, clareza ≥75, fechamento
+≥70, contexto ≤0,25, repetição ≤0,5 e valor informativo ≥0,5; aberturas
+fragmentárias/dependentes e finais incompletos são rejeitados. `renderEligible`
+e métricas ficam no clip/metadata; o resumo da seleção fica no manifesto.
+
+Ranking final: hook 21%, clareza 20%, fechamento 17%, retenção 13%, valor 12%,
+emoção 8%, independência de contexto 9%, com penalidades fortes de abertura,
+contexto, repetição e fechamento. São heurísticas locais, não compreensão semântica.
+Deduplica o pool elegível entre perfis antes do TOP: mesmo momento com overlap
+≥50% mantém a melhor versão; no máximo micro + desenvolvimento ≥40s, com
+diferença real de duração e fechamento. Textos muito semelhantes também são
+suprimidos. Empates usam bordas e duração, antes de IDs, evitando variação pelo UUID.
+
+Diversidade favorece assunto, dez regiões temporais, emoção, hook e duração.
+Proporções orientativas: micro 22,5%, short 27,5%, standard 32,5%, extended 17,5%.
+Não são quotas: a seleção pode retornar menos ou nenhum e não completa categorias
+com candidatos fracos. O renderer reaplica limite/gate antes de reservar storage.
+Retry de versão antiga refaz seleção com a transcrição preservada; lotes antigos
+continuam legíveis e não são usados como cache do renderer novo.
 
 ClipPortfolio contém buckets, highlights, bestOverall, famílias e rankings
 strongestHook, mostEmotional, mostEducational, funniest, mostShareable,
@@ -214,7 +229,10 @@ e duração <=0,3 s de diferença. Cada output tem orçamento calculado pela dur
 teto 128 MiB, -fs e quota global de outputs padrão 4 GiB. Report/manifesto <=16 MiB.
 Cada clip usa fonte verificada própria e render com prazo de 5 min; o lote tem
 60 min, incluindo planejamento. Ambos são configuráveis em [vídeos longos](long-videos.md).
-Publicação do lote é atômica; falha limpa trabalho parcial e mantém lotes anteriores.
+Publicação de cada corte/atualização de manifesto é atômica; falha limpa apenas o
+trabalho não concluído. Cortes já publicados são preservados para retry e aparecem
+na [Biblioteca](library.md), junto com todos os lotes anteriores. Quota de outputs
+é configurável por `OUTPUT_STORAGE_QUOTA_BYTES` e a reserva é por próximo corte.
 
 FFmpeg instalado suporta `-/filter_complex arquivo.ffgraph`; sua versão não aceita
 `-filter_complex_script`. ASS, grafo e assets têm nomes controlados no trabalho UUID

@@ -64,8 +64,9 @@ docs/video-processing.md
   Um refresh não conta novamente o áudio já reservado.
 - O consumidor deve terminar antes de retornar e respeitar o AbortSignal.
   Sucesso, erro, timeout e cancelamento removem o áudio da operação. Depois de
-  crash, áudio órfão conta quota e expira com a retenção do upload, sem invalidar
-  o vídeo original já publicado. Colisão não sobrescreve nem apaga arquivo preexistente.
+  crash, áudio órfão conta quota sem invalidar o vídeo original já publicado.
+  Na API padrão não há mais expiração por idade: veja [Biblioteca](library.md).
+  Colisão não sobrescreve nem apaga arquivo preexistente.
 - Preparação protege o upload da retenção e compartilha as vagas existentes
   de concorrência. Preparação de áudio usa prazo de 1.200.000 ms configurável por
   `VIDEO_PREPARATION_TIMEOUT_MS`; Whisper, análise e render recebem prazos próprios,

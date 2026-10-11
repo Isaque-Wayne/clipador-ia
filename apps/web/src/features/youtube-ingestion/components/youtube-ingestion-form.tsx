@@ -8,7 +8,7 @@ import styles from "./youtube-ingestion.module.css";
 import resultStyles from "../../video-upload/components/upload-result.module.css";
 
 export function YouTubeIngestionForm({ onBusyChange }: { onBusyChange?: (busy: boolean) => void }) {
-  const { url, setUrl, state, submit, cancel } = useYouTubeIngestion();
+  const { url, setUrl, state, submit, cancel, retry } = useYouTubeIngestion();
   const loading = state.status === "loading";
   const [processingBusy, setProcessingBusy] = useState(false);
   const busy = loading || processingBusy;
@@ -40,7 +40,10 @@ export function YouTubeIngestionForm({ onBusyChange }: { onBusyChange?: (busy: b
         </section>}
       </div>
       {state.status === "success" && <ProcessingPanel key={state.result.upload.id} uploadId={state.result.upload.id} onBusyChange={setProcessingBusy} />}
-      {state.status === "error" && <div role="alert"><p>{state.message}</p>{state.id && <p>ID da tentativa: <code>{state.id}</code></p>}</div>}
+      {state.status === "error" && <div role="alert"><p>{state.message}</p>{state.id && <>
+        <p>ID da tentativa: <code>{state.id}</code></p>
+        <button className="button-secondary" type="button" disabled={busy} onClick={() => void retry()}>Tentar novamente</button>
+      </>}</div>}
     </form>
   );
 }

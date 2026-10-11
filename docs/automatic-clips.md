@@ -163,9 +163,11 @@ passaram na validação, mas bitrate é alvo, não tamanho garantido.
 Cleanup remove somente temporários reconhecidos dentro do batch UUID e aguarda
 o processo fechar antes de remover arquivos. Após crash, a inicialização limpa
 `.work`; outputs concluídos não têm expiração automática. Se a quota de outputs
-esgotar, novos renders falham com OUTPUT_QUOTA e preservam os antigos. A retenção
-de uploads/transcrições/análise continua 24 h; MP4 concluído pode ser consultado
-mesmo após o source expirar. Não foi adicionado endpoint de exclusão de outputs.
+esgotar, novos renders falham com OUTPUT_QUOTA e preservam os antigos. Cada corte
+validado agora é publicado antes do próximo render. O retry retoma o mesmo lote
+parcial e valida fonte, análise, plano de edição e checksums antes de reutilizar.
+Uploads/transcrições/análise não expiram mais na API padrão. A [Biblioteca](library.md)
+permite consultar todos os lotes históricos e excluir outputs ou projeto por ID.
 
 ## Validação reproduzível
 

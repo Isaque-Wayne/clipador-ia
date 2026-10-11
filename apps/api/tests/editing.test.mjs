@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, writeFile, readdir, lstat } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, lstat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,11 +19,12 @@ import { createServer } from "../dist/server/create-server.js";
 import { mediaTool, runMediaTool } from "../dist/features/youtube-ingestion/services/ffmpeg-runner.js";
 import { runRenderProcess } from "../dist/features/clip-rendering/services/render-process.js";
 import { fileChecksum } from "../dist/features/clip-rendering/services/clip-storage.js";
+import { digest } from "../dist/features/analysis/services/analysis-persistence.js";
 import { UploadValidationError } from "../dist/features/uploads/utils/validate-video.js";
 
 const signal = new AbortController().signal;
 const segments = [
-  { start: .2, end: 4, text: "Hoje mostro 3 caminhos para uma decisão melhor.", words: ["Hoje", "mostro", "3", "caminhos", "para", "uma", "decisão", "melhor."].map((word, index) => ({ word, start: .2 + index * .475, end: .2 + (index + 1) * .475 })) },
+  { start: .2, end: 4, text: "Como descobri 3 caminhos porque decisões mudam tudo?", words: ["Como", "descobri", "3", "caminhos", "porque", "decisões", "mudam", "tudo?"].map((word, index) => ({ word, start: .2 + index * .475, end: .2 + (index + 1) * .475 })) },
   { start: 6, end: 11.6, text: "Uma ideia clara oferece contexto e ajuda cada pessoa.", words: ["Uma", "ideia", "clara", "oferece", "contexto", "e", "ajuda", "cada", "pessoa."].map((word, index) => ({ word, start: 6 + index * 5.6 / 9, end: 6 + (index + 1) * 5.6 / 9 })) },
 ];
 const transcript = normalizeTranscript({ language: "pt", duration: 12, segments });
@@ -119,9 +120,13 @@ test("FFmpeg real: palavra ativa, zoom mensurável, silêncio sincronizado, mús
     assert.equal(await fileChecksum(path), clip.checksum); assert.equal(await fileChecksum(musicPath), musicClip.checksum);
     assert.deepEqual(await readdir(join(outputs, ".work")), []); assert.ok(!(await readdir(join(directory, id))).some(name => name.endsWith(".part")));
   } finally { await server.close(); }
+  const savedPath=join(directory,id,"processing-portfolio.json"),saved=JSON.parse(await readFile(savedPath,"utf8"));
+  delete saved.state.renderVersion;saved.state.selectedIds=["c_0000000000000000"];saved.state.status.stage="failed";saved.checksum=digest(saved.state);
+  await writeFile(savedPath,JSON.stringify(saved));
   const restored = createServer({ directory }, {}, { engine: { async transcribe() { assert.fail("No ASR repeat"); } } }, options); restored.log.level = "silent";
   try {
     assert.deepEqual((await restored.inject(`/uploads/${id}/portfolio/clips`)).json().batch, musical);
+    const oldRetry=await restored.inject({method:"POST",url:`/projects/${id}/retry`});assert.equal(oldRetry.statusCode,200,oldRetry.body);assert.equal(oldRetry.json().reused,true,"Retry de estado antigo refaz seleção sem IDs incompatíveis nem nova transcrição");
     assert.equal((await restored.inject({ method: "POST", url: `/uploads/${id}/portfolio/process`, payload: { style: "EMOTIONAL" } })).json().reused, true);
     assert.equal((await restored.inject({ method: "POST", url: `/uploads/${id}/portfolio/process`, payload: { style: "DYNAMIC" } })).json().reused, true, "Reutiliza também um lote anterior com preferências iguais");
     assert.deepEqual((await restored.inject(`/uploads/${id}/portfolio/clips`)).json().batch, batch, "Consulta acompanha o lote reutilizado, mesmo quando há outro mais recente");

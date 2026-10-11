@@ -1,5 +1,5 @@
 import type { CutCandidate } from "../analysis/candidate.js";
-export const DURATION_PROFILES = { micro: { min: 8, max: 20, target: 14, objective: "hook/punchline" }, short: { min: 20, max: 45, target: 34, objective: "explicação rápida" }, standard: { min: 45, max: 75, target: 60, objective: "ideia desenvolvida" }, extended: { min: 75, max: 180, target: 105, objective: "raciocínio ou história completa" } } as const;
+export const DURATION_PROFILES = { micro: { min: 8, max: 20, target: 14, objective: "hook/punchline" }, short: { min: 20, max: 40, target: 32, objective: "explicação rápida" }, standard: { min: 40, max: 75, target: 60, objective: "ideia desenvolvida" }, extended: { min: 75, max: 180, target: 105, objective: "raciocínio ou história completa" } } as const;
 export type DurationProfile = keyof typeof DURATION_PROFILES;
 export type QuantityMode = "auto" | "few" | "normal" | "many" | "maximum";
 export type EmotionName = "enthusiasm" | "surprise" | "humor" | "tension" | "indignation" | "inspiration" | "curiosity" | "vulnerability" | "confidence" | "energy" | "urgency" | "reflection";

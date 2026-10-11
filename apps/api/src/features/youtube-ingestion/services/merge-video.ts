@@ -1,15 +1,18 @@
-import { lstat, open, unlink } from "node:fs/promises";
+import { lstat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { YouTubeReference } from "../../../../../../config/youtube-url.mjs";
 import type { StagingContext, OpenedVideo } from "../../uploads/services/persist-video-input.js";
-import { writeVideoStream } from "../../uploads/services/write-video-stream.js";
-import { validateVideoSize, MAX_VIDEO_BYTES, UploadValidationError } from "../../uploads/utils/validate-video.js";
+import { UploadValidationError } from "../../uploads/utils/validate-video.js";
 import type { VideoInputSelection } from "../utils/select-input.js";
 import { mergeArguments } from "../utils/ffmpeg-command.js";
 import { runMediaTool } from "./ffmpeg-runner.js";
 import { createYtdlpStream } from "./stream-ytdlp.js";
 import type { TransferSummary } from "./stream-ytdlp.js";
 import type { IngestionStatus } from "../types/ingestion.js";
+import { downloadTrack } from "./download-track.js";
+import { trackArguments } from "./downloader-command.js";
+import type { DiagnosticObserver } from "../types/diagnostic.js";
+import { sanitizeDiagnostic } from "../types/diagnostic.js";
 
 export interface MergeDependencies {
   download?: ReturnType<typeof createYtdlpStream>;
@@ -17,7 +20,7 @@ export interface MergeDependencies {
 }
 export async function mergeVideo(reference: YouTubeReference, selection: Extract<VideoInputSelection, { mode: "separate" }>,
   context: StagingContext, signal: AbortSignal, onStatus?: (status: IngestionStatus) => void,
-  onDiagnostic?: (message: string) => void, onTransfer?: (summary: TransferSummary) => void, dependencies: MergeDependencies = {}, onProgress?: (bytes: number) => void): Promise<OpenedVideo> {
+  onDiagnostic?: (message: string) => void, onTransfer?: (summary: TransferSummary) => void, dependencies: MergeDependencies = {}, onProgress?: (bytes: number) => void, observe?: DiagnosticObserver): Promise<OpenedVideo> {
   const created: string[] = [];
   let stored = 0;
   const clean = async () => {
@@ -29,24 +32,23 @@ export async function mergeVideo(reference: YouTubeReference, selection: Extract
     }
     created.length = 0;
   };
-  const download = dependencies.download ?? createYtdlpStream({ ...(onDiagnostic ? { onDiagnostic } : {}), ...(onTransfer ? { onTransfer } : {}),
+  let current: { stage: "video" | "audio"; formatId: string; attempt: number } | undefined;
+  const download = dependencies.download ?? createYtdlpStream({ ...(onDiagnostic ? { onDiagnostic } : {}), onTransfer: summary => {
+    onTransfer?.(summary);
+    if (current) observe?.({ ...current, ...summary, stderr: sanitizeDiagnostic(summary.stderr) });
+  },
     ...(onProgress ? { onProgress: bytes => onProgress(stored + bytes) } : {}) });
   try {
     for (const [kind, track] of [["video", selection.video], ["audio", selection.audio]] as const) {
       signal.throwIfAborted();
       onStatus?.(kind === "video" ? "downloading-video" : "downloading-audio");
-      const name = `track-${kind}.part`;
-      const file = await open(join(context.directory, name), "wx", 0o600);
-      created.push(name);
-      let opened: OpenedVideo | undefined;
-      try {
-        opened = await download(reference, "mp4", signal, track.id);
-        opened.content.on("error", () => {}); // O leitor verifica source.errored entre escritas.
-        const result = await writeVideoStream(opened.content, file, MAX_VIDEO_BYTES, signal, undefined, (size) => {
-          validateVideoSize(stored + size); context.reserveTemporaryBytes(stored + size);
-        });
-        stored += result.size;
-      } finally { try { await opened?.dispose?.(); } finally { await file.close(); } }
+      const result = await downloadTrack(reference, kind, track, context, stored, signal, download, (candidate, attempt) => {
+        current = { stage: kind, formatId: candidate.id, attempt };
+        observe?.({ ...current, arguments: trackArguments(reference, candidate.id) });
+        onProgress?.(stored);
+      });
+      created.push(result.name);
+      stored += result.size;
     }
     onStatus?.("merging");
     const merged = await (dependencies.merge ? dependencies.merge(context.directory, signal)

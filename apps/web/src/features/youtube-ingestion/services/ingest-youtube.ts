@@ -3,7 +3,7 @@ import { object, parseIngestionResult } from "../utils/parse-ingestion-result";
 import type { IngestionProgress } from "../types/ingestion";
 
 export class IngestionError extends Error {
-  constructor(message: string, public readonly id?: string, public readonly code = "INGESTION_FAILED") { super(message); }
+  constructor(message: string, public readonly id?: string, public readonly code = "INGESTION_FAILED", public readonly sourceUrl?: string) { super(message); }
 }
 const uuid = (id: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id);
 const stages: IngestionProgress["status"][] = ["queued", "pending", "fetching-metadata", "downloading", "downloading-video", "downloading-audio", "merging"];
@@ -24,7 +24,7 @@ async function request(path: string, method: "GET" | "POST" | "DELETE", signal: 
     const record = object(body) ? body["ingestion"] : undefined;
     throw new IngestionError(object(body) && typeof body["message"] === "string" ? body["message"] : "Não foi possível importar o vídeo.",
       object(record) && typeof record["id"] === "string" ? record["id"] : undefined,
-      object(body) && typeof body["code"] === "string" ? body["code"] : response.status >= 502 ? "API_UNAVAILABLE" : "INGESTION_FAILED");
+      object(body) && typeof body["code"] === "string" ? body["code"] : !object(body) && response.status >= 502 ? "API_UNAVAILABLE" : "INGESTION_FAILED");
   }
   return body["ingestion"];
 }
@@ -38,7 +38,8 @@ export async function waitForIngestion(id: string, signal: AbortSignal, onUpdate
       if (!object(value) || value["id"] !== id) throw new IngestionError("Status de ingestão inválido.", id);
       if (value["status"] === "downloaded") return parseIngestionResult(value);
       if (value["status"] === "failed") throw new IngestionError(typeof value["message"] === "string" ? value["message"] : "A ingestão falhou.", id,
-        typeof value["code"] === "string" ? value["code"] : "INGESTION_FAILED");
+        typeof value["code"] === "string" ? value["code"] : "INGESTION_FAILED",
+        object(value["video"]) && typeof value["video"]["url"] === "string" ? value["video"]["url"] : undefined);
       if (!stages.some(stage => stage === value["status"])) throw new IngestionError("Etapa de ingestão inválida.", id);
       last = { id, status: value["status"] as IngestionProgress["status"] };
       const progress = value["progress"];
@@ -70,4 +71,13 @@ export async function ingestYouTube(value: string, signal: AbortSignal, onUpdate
 export async function cancelIngestion(id: string, signal: AbortSignal) {
   if (!uuid(id)) throw new IngestionError("ID da ingestão inválido.");
   return request(id, "DELETE", signal);
+}
+export async function retryYouTubeIngestion(id: string, signal: AbortSignal, onUpdate?: (progress: IngestionProgress) => void, sourceUrl?: string) {
+  if (!uuid(id)) throw new IngestionError("ID da ingestão inválido.");
+  // A URL canônica da tentativa permanece no formulário mesmo se a API reiniciar e esquecer a falha.
+  if (sourceUrl) return ingestYouTube(sourceUrl, signal, onUpdate);
+  const previous = await request(id, "GET", signal);
+  if (!object(previous) || previous["status"] !== "failed" || !object(previous["video"]) || typeof previous["video"]["url"] !== "string")
+    throw new IngestionError("Não foi possível recuperar uma tentativa falhada. Envie novamente o link do YouTube.", id);
+  return ingestYouTube(previous["video"]["url"], signal, onUpdate);
 }

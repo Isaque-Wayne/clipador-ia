@@ -6,7 +6,7 @@ export function useProcessing(uploadId: string) {
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ProcessingStatus>({ uploadId, stage: "not-started" });
   const [clips, setClips] = useState<ClipCard[]>([]);
-  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [error, setError] = useState<NonNullable<ProcessingStatus["error"]> | null>(null);
   const [busy, setBusy] = useState(true);
   const [warning, setWarning] = useState<string | null>(null);
   useEffect(() => {
@@ -32,7 +32,10 @@ export function useProcessing(uploadId: string) {
           }
           const next = parseProcessingStatus(result["status"], uploadId); setStatus(next);
           if (next.stage === "not-started") throw new ProcessingApiError("INTERRUPTED", "A API reiniciou ou o job foi interrompido. Os resultados concluídos foram preservados; tente novamente para reutilizá-los.");
-          if (next.stage === "failed") throw new ProcessingApiError(next.error?.code ?? "PROCESSING_FAILED", next.error?.message ?? "O processamento falhou.");
+          if (next.stage === "failed") {
+            try { const saved = await processingRequest(uploadId, "portfolio/clips", "GET", abort.signal); setClips(parseClipCards(saved["batch"], uploadId)); } catch { /* No completed outputs yet. */ }
+            throw new ProcessingApiError(next.error?.code ?? "PROCESSING_FAILED", next.error?.message ?? "O processamento falhou.", next.error);
+          }
           if (next.stage === "completed") {
             const output = await processingRequest(uploadId, "portfolio/clips", "GET", abort.signal);
             setClips(parseClipCards(output["batch"], uploadId)); break;
@@ -44,7 +47,7 @@ export function useProcessing(uploadId: string) {
           });
         }
       } catch (failure) {
-        if (!abort.signal.aborted) setError(failure instanceof ProcessingApiError ? { code: failure.code, message: failure.message } : { code: "UNEXPECTED_ERROR", message: "Não foi possível consultar os cortes." });
+        if (!abort.signal.aborted) setError(failure instanceof ProcessingApiError ? { ...failure.details, code: failure.code, message: failure.message } : { code: "UNEXPECTED_ERROR", message: "Não foi possível consultar os cortes." });
       } finally { if (!abort.signal.aborted) setBusy(false); }
     }
     void run();

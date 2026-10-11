@@ -1,0 +1,13 @@
+.package { min-width: 0; }
+.tabs { display: flex; gap: .5rem; padding: .65rem 1rem; border-bottom: 1px solid var(--glass-border); }
+.tabs button { padding: .45rem .9rem; font-size: .8rem; }
+.tabs button[aria-pressed="true"] { background: rgba(160,215,233,.12); color: var(--text-primary); }
+.media { display: block; width: 100%; max-width: 270px; margin-inline: auto; height: auto; max-height: 480px; aspect-ratio: 9 / 16; object-fit: contain; background: #101724; }
+.info { padding: .8rem 1rem; font-size: .8rem; line-height: 1.5; border-bottom: 1px solid var(--glass-border); }
+.info p { margin: .25rem 0 .6rem; }
+.info details { margin: .7rem 0; color: var(--text-secondary); }
+.info summary { cursor: pointer; }
+.info a { color: var(--accent); }
+.platforms { color: var(--text-secondary); }
+.downloads { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .7rem; }
+.downloads a { font-size: .75rem; padding: .5rem .7rem; }

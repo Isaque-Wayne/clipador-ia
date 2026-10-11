@@ -2,7 +2,7 @@ import { isCandidateId } from "../../analysis/services/analysis-persistence.js";
 import type { CutCandidate } from "../../analysis/candidate.js";
 import type { VideoInspection } from "../../video-preparation/types/inspection.js";
 export const MAX_CLIP_BYTES = 128 * 1024 * 1024;
-export const RENDER_VERSION = "vertical-ass-1.0.0";
+export const RENDER_VERSION = "legacy-vertical-quality-1.1.1";
 export function composition(inspection: Pick<VideoInspection, "width" | "height">) {
   const aspect = inspection.width / inspection.height, target = 9 / 16;
   const retained = Math.min(aspect / target, target / aspect);

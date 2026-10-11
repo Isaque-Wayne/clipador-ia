@@ -63,11 +63,11 @@ test("headers e URLs assinadas ficam com o yt-dlp e não entram no contrato prep
 });
 
 const errors = [
-  ["ERROR: [youtube] jNQXAC9IVRw: Requested format is not available. Use --list-formats for a list of available formats", 422, /formato.*compatível/],
+  ["ERROR: [youtube] jNQXAC9IVRw: Requested format is not available. Use --list-formats for a list of available formats", 422, /formato.*disponível/],
   ["ERROR: [youtube] BaW_jenozKc: This video is unavailable", 422, /indisponível/],
   ["ERROR: [youtube] id: Private video. Sign in if you've been granted access", 422, /privado/],
   ["ERROR: [youtube] id: Sign in to confirm your age", 422, /restrição/],
-  ["ERROR: [youtube] id: Sign in to confirm you're not a bot", 502, /bloqueou/],
+  ["ERROR: [youtube] id: Sign in to confirm you're not a bot", 422, /bloqueou/],
   ["ERROR: HTTP Error 403: Forbidden", 502, /bloqueou/],
   ["ERROR: HTTP Error 503: Service Unavailable", 502, /HTTP 503/],
   ["ERROR: request timed out", 504, /tempo limite/],

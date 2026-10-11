@@ -12,7 +12,9 @@ const nextConfig: NextConfig = {
     return [{
       source: "/api/uploads/:path*",
       destination: `${process.env["API_BASE_URL"] ?? "http://127.0.0.1:3001"}/uploads/:path*`,
-    }, { source: "/api/ingestions/:path*", destination: `${process.env["API_BASE_URL"] ?? "http://127.0.0.1:3001"}/ingestions/:path*` }];
+    }, { source: "/api/ingestions/:path*", destination: `${process.env["API_BASE_URL"] ?? "http://127.0.0.1:3001"}/ingestions/:path*` },
+    { source: "/api/projects/:path*", destination: `${process.env["API_BASE_URL"] ?? "http://127.0.0.1:3001"}/projects/:path*` },
+    { source: "/api/storage/:path*", destination: `${process.env["API_BASE_URL"] ?? "http://127.0.0.1:3001"}/storage/:path*` }];
   },
 };
 

@@ -13,7 +13,7 @@ export interface StoredUpload {
   metadata: UploadMetadata | undefined;
 }
 
-export const MANAGED_FILE = /^(metadata\.json(?:\.part)?|transcript\.json(?:\.part)?|(?:analysis|portfolio)\.json(?:\.part)?|video\.(mp4|webm|mov)(?:\.part)?|track-(video|audio)\.part|audio-asr\.wav\.part)$/;
+export const MANAGED_FILE = /^(metadata\.json(?:\.part)?|transcript\.json(?:\.part)?|(?:analysis|portfolio|processing-legacy|processing-portfolio)\.json(?:\.part)?|video\.(mp4|webm|mov)(?:\.part)?|track-(video|audio)\.part|audio-asr\.wav\.part)$/;
 
 export async function scanUploadStorage(root: string, excluded: ReadonlySet<string> = new Set(), preparing: ReadonlySet<string> = new Set()): Promise<{ uploads: StoredUpload[]; bytes: number }> {
   const uploads: StoredUpload[] = [];
@@ -49,7 +49,7 @@ export async function scanUploadStorage(root: string, excluded: ReadonlySet<stri
       const extension = metadata.extension;
       const video = files.find((file) => file.name === `video${extension}`);
       if ((metadata.status !== "failed" && (!video || (await lstat(join(directory, video.name))).size !== metadata.file.size))
-        || files.some((file) => file.name.endsWith(".part") && !["audio-asr.wav.part", "transcript.json.part", "analysis.json.part", "portfolio.json.part"].includes(file.name))) metadata = undefined;
+        || files.some((file) => file.name.endsWith(".part") && !["audio-asr.wav.part", "transcript.json.part", "analysis.json.part", "portfolio.json.part", "processing-legacy.json.part", "processing-portfolio.json.part"].includes(file.name))) metadata = undefined;
     }
     bytes += uploadBytes;
     uploads.push({ id: entry.name, bytes: uploadBytes, modifiedAt, removable, metadata });
